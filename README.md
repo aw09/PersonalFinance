@@ -8,16 +8,20 @@ A comprehensive fullstack personal finance management application built with Nex
 - [x] User authentication with Supabase Auth
 - [x] Responsive dashboard layout
 - [x] Database schema for comprehensive finance tracking
+- [x] Wallet management (create, view, list)
+- [x] Transaction management (create, view, list)
+- [x] Category support for transactions
+- [x] Multi-currency support
 
 ### 🚧 In Development  
-- [ ] Multiple wallets with sharing capabilities
-- [ ] Expense and income tracking with categories
 - [ ] Loan and credit/receivables management
 - [ ] Installment payment tracking
 - [ ] Investment tracking with current value monitoring
 - [ ] Budgeting system with period-based tracking
 - [ ] Scheduled/repeated transactions
 - [ ] Item-level expense tracking for price monitoring
+- [ ] Wallet sharing with other users
+- [ ] Transaction analytics and reporting
 - [ ] Telegram bot integration
 - [ ] LLM-powered chat processing for transactions
 - [ ] Receipt image processing with LLM
@@ -100,17 +104,18 @@ All tables implement Row Level Security (RLS) for data protection.
 - [x] Database schema design
 - [x] Basic dashboard layout
 
-### Phase 2: Transaction Management (In Progress)
-- [ ] Wallet CRUD operations
-- [ ] Transaction creation and management
-- [ ] Category management
-- [ ] Basic reporting and analytics
+### Phase 2: Transaction Management ✅
+- [x] Wallet CRUD operations
+- [x] Transaction creation and management
+- [x] Category management
+- [x] Multi-currency support
 
-### Phase 3: Advanced Features
+### Phase 3: Advanced Financial Features
 - [ ] Budget creation and tracking
 - [ ] Loan and installment management
 - [ ] Investment portfolio tracking
 - [ ] Scheduled transactions
+- [ ] Transaction analytics and insights
 
 ### Phase 4: Automation & Integration
 - [ ] Telegram bot integration
@@ -126,7 +131,12 @@ All tables implement Row Level Security (RLS) for data protection.
 ## API Routes
 
 - `GET /auth/callback` - Supabase authentication callback
-- Future API routes will be documented here as they're implemented
+- `GET /api/wallets` - List user's wallets
+- `POST /api/wallets` - Create a new wallet
+- `GET /api/categories` - List user's categories
+- `POST /api/categories` - Create a new category
+- `GET /api/transactions` - List transactions (with optional wallet filter)
+- `POST /api/transactions` - Create a new transaction
 
 ## Contributing
 

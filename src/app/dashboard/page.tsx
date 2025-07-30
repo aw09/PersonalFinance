@@ -4,10 +4,15 @@ import { useEffect, useState } from 'react'
 import { User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import WalletList from '@/components/wallets/WalletList'
+import TransactionList from '@/components/transactions/TransactionList'
+import AddTransactionModal from '@/components/transactions/AddTransactionModal'
 
 export default function Dashboard() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showAddTransaction, setShowAddTransaction] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
   const router = useRouter()
 
   useEffect(() => {
@@ -41,6 +46,10 @@ export default function Dashboard() {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
+  }
+
+  const handleTransactionAdded = () => {
+    setRefreshKey(prev => prev + 1) // Force refresh of components
   }
 
   if (loading) {
@@ -79,7 +88,7 @@ export default function Dashboard() {
       </nav>
 
       <div className="container mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           {/* Quick Stats Cards */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-semibold text-gray-700 mb-4">Total Balance</h2>
@@ -97,55 +106,50 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Wallets Section */}
+        <div className="mb-8">
+          <WalletList key={`wallets-${refreshKey}`} />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Recent Transactions */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-gray-700">Recent Transactions</h2>
-              <button className="text-blue-600 hover:text-blue-800 text-sm font-medium">
-                View All
-              </button>
-            </div>
-            <div className="text-gray-500 text-center py-8">
-              No transactions yet. Start by adding your first transaction!
-            </div>
+          <div>
+            <TransactionList
+              key={`transactions-${refreshKey}`}
+              limit={5}
+              onAddTransaction={() => setShowAddTransaction(true)}
+            />
           </div>
 
           {/* Quick Actions */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-semibold text-gray-700 mb-4">Quick Actions</h2>
             <div className="space-y-3">
-              <button className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition">
+              <button 
+                onClick={() => setShowAddTransaction(true)}
+                className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition"
+              >
                 Add Transaction
               </button>
               <button className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition">
                 Create Budget
               </button>
-              <button className="w-full bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700 transition">
-                Add Wallet
-              </button>
               <button className="w-full bg-yellow-600 text-white py-2 px-4 rounded-md hover:bg-yellow-700 transition">
                 Track Investment
               </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Wallets Section */}
-        <div className="mt-8">
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-gray-700">My Wallets</h2>
-              <button className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition">
-                Add Wallet
+              <button className="w-full bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700 transition">
+                Manage Categories
               </button>
-            </div>
-            <div className="text-gray-500 text-center py-8">
-              No wallets created yet. Create your first wallet to start tracking your finances!
             </div>
           </div>
         </div>
       </div>
+
+      <AddTransactionModal
+        isOpen={showAddTransaction}
+        onClose={() => setShowAddTransaction(false)}
+        onTransactionAdded={handleTransactionAdded}
+      />
     </main>
   )
 }
