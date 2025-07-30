@@ -1,0 +1,17 @@
+# Railway.app deployment configuration
+
+# Build command
+npm run build
+
+# Start command  
+npm start
+
+# Environment variables needed:
+# NEXT_PUBLIC_SUPABASE_URL
+# NEXT_PUBLIC_SUPABASE_ANON_KEY
+# SUPABASE_SERVICE_ROLE_KEY (optional)
+# TELEGRAM_BOT_TOKEN (optional)
+# OPENAI_API_KEY (optional)
+
+# Port
+PORT=3000
