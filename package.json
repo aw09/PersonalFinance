@@ -17,12 +17,14 @@
     "date-fns": "^4.1.0",
     "lucide-react": "^0.534.0",
     "next": "^14.1.0",
+    "node-telegram-bot-api": "^0.66.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
+    "@types/node-telegram-bot-api": "^0.64.9",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@types/uuid": "^10.0.0",

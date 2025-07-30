@@ -12,20 +12,21 @@ A comprehensive fullstack personal finance management application built with Nex
 - [x] Transaction management (create, view, list)
 - [x] Category support for transactions
 - [x] Multi-currency support
+- [x] Budget management and tracking
+- [x] Basic Telegram bot integration
+- [x] Investment tracking API
 
 ### 🚧 In Development  
 - [ ] Loan and credit/receivables management
 - [ ] Installment payment tracking
-- [ ] Investment tracking with current value monitoring
-- [ ] Budgeting system with period-based tracking
+- [ ] Advanced investment portfolio features
 - [ ] Scheduled/repeated transactions
 - [ ] Item-level expense tracking for price monitoring
 - [ ] Wallet sharing with other users
 - [ ] Transaction analytics and reporting
-- [ ] Telegram bot integration
 - [ ] LLM-powered chat processing for transactions
 - [ ] Receipt image processing with LLM
-- [ ] Railway.app deployment configuration
+- [ ] Advanced Telegram bot features
 
 ## Technology Stack
 
@@ -137,6 +138,11 @@ All tables implement Row Level Security (RLS) for data protection.
 - `POST /api/categories` - Create a new category
 - `GET /api/transactions` - List transactions (with optional wallet filter)
 - `POST /api/transactions` - Create a new transaction
+- `GET /api/budgets` - List user's budgets
+- `POST /api/budgets` - Create a new budget
+- `GET /api/investments` - List user's investments
+- `POST /api/investments` - Create a new investment
+- `POST /api/telegram/webhook` - Telegram bot webhook endpoint
 
 ## Contributing
 

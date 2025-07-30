@@ -7,11 +7,14 @@ import { useRouter } from 'next/navigation'
 import WalletList from '@/components/wallets/WalletList'
 import TransactionList from '@/components/transactions/TransactionList'
 import AddTransactionModal from '@/components/transactions/AddTransactionModal'
+import BudgetList from '@/components/budgets/BudgetList'
+import CreateBudgetModal from '@/components/budgets/CreateBudgetModal'
 
 export default function Dashboard() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [showAddTransaction, setShowAddTransaction] = useState(false)
+  const [showCreateBudget, setShowCreateBudget] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const router = useRouter()
 
@@ -48,7 +51,7 @@ export default function Dashboard() {
     await supabase.auth.signOut()
   }
 
-  const handleTransactionAdded = () => {
+  const handleDataUpdated = () => {
     setRefreshKey(prev => prev + 1) // Force refresh of components
   }
 
@@ -87,9 +90,9 @@ export default function Dashboard() {
         </div>
       </nav>
 
-      <div className="container mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-          {/* Quick Stats Cards */}
+      <div className="container mx-auto px-4 py-8 space-y-8">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-semibold text-gray-700 mb-4">Total Balance</h2>
             <p className="text-3xl font-bold text-green-600">$0.00</p>
@@ -107,19 +110,18 @@ export default function Dashboard() {
         </div>
 
         {/* Wallets Section */}
-        <div className="mb-8">
-          <WalletList key={`wallets-${refreshKey}`} />
-        </div>
+        <WalletList key={`wallets-${refreshKey}`} />
+
+        {/* Budgets Section */}
+        <BudgetList key={`budgets-${refreshKey}`} />
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Recent Transactions */}
-          <div>
-            <TransactionList
-              key={`transactions-${refreshKey}`}
-              limit={5}
-              onAddTransaction={() => setShowAddTransaction(true)}
-            />
-          </div>
+          <TransactionList
+            key={`transactions-${refreshKey}`}
+            limit={5}
+            onAddTransaction={() => setShowAddTransaction(true)}
+          />
 
           {/* Quick Actions */}
           <div className="bg-white rounded-lg shadow-md p-6">
@@ -131,7 +133,10 @@ export default function Dashboard() {
               >
                 Add Transaction
               </button>
-              <button className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition">
+              <button 
+                onClick={() => setShowCreateBudget(true)}
+                className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition"
+              >
                 Create Budget
               </button>
               <button className="w-full bg-yellow-600 text-white py-2 px-4 rounded-md hover:bg-yellow-700 transition">
@@ -148,7 +153,13 @@ export default function Dashboard() {
       <AddTransactionModal
         isOpen={showAddTransaction}
         onClose={() => setShowAddTransaction(false)}
-        onTransactionAdded={handleTransactionAdded}
+        onTransactionAdded={handleDataUpdated}
+      />
+
+      <CreateBudgetModal
+        isOpen={showCreateBudget}
+        onClose={() => setShowCreateBudget(false)}
+        onBudgetCreated={handleDataUpdated}
       />
     </main>
   )
