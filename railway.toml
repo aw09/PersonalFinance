@@ -1,10 +1,10 @@
 # Railway.app deployment configuration
 
-# Build command
-npm run build
+[build]
+command = "npm run build"
 
-# Start command  
-npm start
+[deploy]
+startCommand = "npm start"
 
 # Environment variables needed:
 # NEXT_PUBLIC_SUPABASE_URL
@@ -13,5 +13,5 @@ npm start
 # TELEGRAM_BOT_TOKEN (optional)
 # OPENAI_API_KEY (optional)
 
-# Port
-PORT=3000
+[env]
+PORT = "3000"
