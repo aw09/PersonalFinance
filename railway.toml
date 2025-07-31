@@ -4,7 +4,7 @@
 command = "npm run build"
 
 [deploy]
-startCommand = "npm start"
+startCommand = "node .next/standalone/server.js"
 
 # Environment variables needed:
 # NEXT_PUBLIC_SUPABASE_URL
