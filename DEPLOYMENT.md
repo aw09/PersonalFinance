@@ -47,6 +47,11 @@
 3. Set environment variables
 4. Run `npm run build && npm start`
 
+**Note:** This application uses Next.js standalone mode. After building, you can also run:
+- `npm start` (recommended) 
+- `node .next/standalone/server.js` (direct command)
+- `npm run start:dev` (development mode with `next start`)
+
 ## Environment Variables Reference
 
 | Variable | Required | Description |
