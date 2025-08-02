@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "node scripts/validate-env.js && node .next/standalone/server.js",
+    "start": "node -e \"if(process.env.NODE_ENV==='production'&&(!process.env.NEXT_PUBLIC_SUPABASE_URL||!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)){console.error('❌ Missing required environment variables: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY');console.error('Please set these in your Railway project settings.');process.exit(1);}console.log('✅ Environment validated');\" && node .next/standalone/server.js",
     "start:dev": "next start",
     "lint": "next lint"
   },

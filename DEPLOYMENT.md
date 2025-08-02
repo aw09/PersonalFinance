@@ -33,7 +33,7 @@
 ### Railway-Specific Notes
 - The deployment uses `npm start` command which runs the optimized standalone server
 - PORT is automatically assigned by Railway - do not override it
-- Environment variables are validated on startup - missing required variables will cause deployment to fail with clear error messages
+- Environment variables are validated inline during startup - missing required variables will cause deployment to fail with clear error messages
 - Check Railway logs if deployment fails for specific error details
 
 ### Step 3: Set up Telegram Bot (Optional)
