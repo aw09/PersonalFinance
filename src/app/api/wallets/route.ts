@@ -87,6 +87,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Wallet name is required' }, { status: 400 })
     }
 
+    // Ensure the user profile exists before creating wallet
+    const { data: existingProfile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', user.id)
+      .single()
+
+    // If profile doesn't exist, create it
+    if (!existingProfile) {
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert({
+          id: user.id,
+          email: user.email || '',
+          full_name: user.user_metadata?.full_name || null
+        })
+
+      if (profileError) {
+        console.error('Error creating profile:', profileError)
+        return NextResponse.json({ error: 'Failed to create user profile' }, { status: 500 })
+      }
+    }
+
     const { data: wallet, error } = await supabase
       .from('wallets')
       .insert({
