@@ -169,12 +169,39 @@ All tables implement Row Level Security (RLS) for data protection.
 2. Set environment variables in Railway dashboard
 3. Deploy automatically on push to main branch
 
+### Docker Deployment
+1. Create a `.env` file with your environment variables:
+   ```
+   NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+   ```
+
+2. Build and run with Docker:
+   ```bash
+   # Linux/Mac
+   ./scripts/docker-local.sh
+   
+   # Windows PowerShell
+   ./scripts/docker-local.ps1
+   ```
+
+   Or manually:
+   ```bash
+   # Build with build arguments
+   docker build \
+     --build-arg NEXT_PUBLIC_SUPABASE_URL=your-supabase-url \
+     --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key \
+     -t personal-finance .
+     
+   # Run with runtime environment variables
+   docker run -p 3000:3000 --env-file .env personal-finance
+   ```
+
 ### Other Platforms
 The app can be deployed on any platform that supports Next.js:
 - Vercel
 - Netlify
 - Heroku
-- Docker containers
 
 ## License
 

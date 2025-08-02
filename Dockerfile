@@ -1,4 +1,4 @@
-FROM node:18-alpine AS base
+FROM node:20-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -17,6 +17,16 @@ COPY . .
 # Disable telemetry during the build
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# These ARGs are passed at build time from Railway
+# Default values are used only for build time, not runtime
+ARG NEXT_PUBLIC_SUPABASE_URL=https://placeholder-build-time-only.supabase.co
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder-build-time-only
+
+# Pass the build ARGs to environment variables
+ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+RUN echo "Building with Supabase URL: $NEXT_PUBLIC_SUPABASE_URL (build-time value only)"
 RUN npm run build
 
 # Production image, copy all the files and run next
@@ -25,9 +35,10 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-# Do not hardcode these values - they should be passed at runtime
-# ENV NEXT_PUBLIC_SUPABASE_URL
-# ENV NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+# These will be overridden at container runtime
+ENV NEXT_PUBLIC_SUPABASE_URL=
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
