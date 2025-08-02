@@ -189,7 +189,7 @@ supabase/
 ├── config.toml              # Supabase configuration
 ├── migrations/              # Migration files
 │   └── 20250802102430_initial_schema.sql
-├── seed.sql                # Default data (categories, etc.)
+├── seed.sql                # Seed data (user-specific data handled by app)
 └── .gitignore              # Git ignore for temp files
 
 src/lib/
