@@ -7,19 +7,15 @@ builder = "dockerfile"
 [deploy]
 restartPolicyType = "on_failure"
 
-# Environment variables needed:
-# NEXT_PUBLIC_SUPABASE_URL
-# NEXT_PUBLIC_SUPABASE_ANON_KEY 
-# SUPABASE_SERVICE_ROLE_KEY (optional)
-# TELEGRAM_BOT_TOKEN (optional) 
-# OPENAI_API_KEY (optional)
-
-# Environment variables needed:
-# NEXT_PUBLIC_SUPABASE_URL
-# NEXT_PUBLIC_SUPABASE_ANON_KEY
-# SUPABASE_SERVICE_ROLE_KEY (optional)
-# TELEGRAM_BOT_TOKEN (optional)
-# OPENAI_API_KEY (optional)
+# IMPORTANT: You must set these environment variables in your Railway project settings
+# Required environment variables:
+# - NEXT_PUBLIC_SUPABASE_URL
+# - NEXT_PUBLIC_SUPABASE_ANON_KEY
+#
+# Optional environment variables:
+# - SUPABASE_SERVICE_ROLE_KEY
+# - TELEGRAM_BOT_TOKEN
+# - OPENAI_API_KEY
 
 [env]
 PORT = "3000"
