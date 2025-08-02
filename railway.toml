@@ -1,10 +1,18 @@
 # Railway.app deployment configuration
 
+# Switch to Docker build since it works locally
 [build]
-command = "npm run build"
+builder = "dockerfile"
 
 [deploy]
-startCommand = "node .next/standalone/server.js"
+restartPolicyType = "on_failure"
+
+# Environment variables needed:
+# NEXT_PUBLIC_SUPABASE_URL
+# NEXT_PUBLIC_SUPABASE_ANON_KEY 
+# SUPABASE_SERVICE_ROLE_KEY (optional)
+# TELEGRAM_BOT_TOKEN (optional) 
+# OPENAI_API_KEY (optional)
 
 # Environment variables needed:
 # NEXT_PUBLIC_SUPABASE_URL
