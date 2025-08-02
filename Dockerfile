@@ -59,8 +59,8 @@ EXPOSE 3000
 ENV PORT=3000
 
 # Create a health check script
-RUN echo '#!/bin/sh\necho "Health check passed"\nexit 0' > /app/healthcheck.sh && \
-    chmod +x /app/healthcheck.sh
+# RUN echo '#!/bin/sh\necho "Health check passed"\nexit 0' > /app/healthcheck.sh && \
+#     chmod +x /app/healthcheck.sh
 
 # Use a shell script to check for environment variables at runtime
 CMD ["sh", "-c", "if [ -z \"$NEXT_PUBLIC_SUPABASE_URL\" ] || [ -z \"$NEXT_PUBLIC_SUPABASE_ANON_KEY\" ]; then echo \"❌ Error: Required environment variables missing. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your Railway project\"; exit 1; else echo \"✅ Starting server with environment: $NODE_ENV\"; node server.js; fi"]
