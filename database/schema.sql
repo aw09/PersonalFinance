@@ -154,23 +154,29 @@ CREATE POLICY "Users can view own profile" ON profiles FOR SELECT USING (auth.ui
 CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
 CREATE POLICY "Users can insert own profile" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
 
--- Wallets policies
+-- Wallets policies  
 ALTER TABLE wallets ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view own wallets" ON wallets FOR SELECT USING (
-  owner_id = auth.uid() OR 
-  id IN (SELECT wallet_id FROM wallet_shares WHERE user_id = auth.uid())
+  owner_id = auth.uid()
 );
 CREATE POLICY "Users can insert own wallets" ON wallets FOR INSERT WITH CHECK (owner_id = auth.uid());
 CREATE POLICY "Users can update own wallets" ON wallets FOR UPDATE USING (
-  owner_id = auth.uid() OR 
-  id IN (SELECT wallet_id FROM wallet_shares WHERE user_id = auth.uid() AND permission IN ('write', 'admin'))
+  owner_id = auth.uid()
 );
 
 -- Wallet shares policies
 ALTER TABLE wallet_shares ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can view wallet shares" ON wallet_shares FOR SELECT USING (
-  user_id = auth.uid() OR 
-  wallet_id IN (SELECT id FROM wallets WHERE owner_id = auth.uid())
+CREATE POLICY "Users can view their wallet shares" ON wallet_shares FOR SELECT USING (
+  user_id = auth.uid()
+);
+CREATE POLICY "Users can manage wallet shares" ON wallet_shares FOR INSERT WITH CHECK (
+  user_id = auth.uid()
+);
+CREATE POLICY "Users can update wallet shares" ON wallet_shares FOR UPDATE USING (
+  user_id = auth.uid()
+);
+CREATE POLICY "Users can delete wallet shares" ON wallet_shares FOR DELETE USING (
+  user_id = auth.uid()
 );
 
 -- Categories policies
