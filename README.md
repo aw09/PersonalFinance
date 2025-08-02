@@ -70,9 +70,18 @@ A comprehensive fullstack personal finance management application built with Nex
    ```
 
 4. Set up the database:
-   - Go to your Supabase project dashboard
-   - Navigate to the SQL Editor
-   - Run the SQL script from `database/schema.sql`
+   - **Option 1: Using Migration System (Recommended)**
+     ```bash
+     # Start local Supabase instance
+     npm run db start
+     
+     # Apply all migrations
+     npm run db reset
+     ```
+   - **Option 2: Manual Setup**
+     - Go to your Supabase project dashboard
+     - Navigate to the SQL Editor
+     - Run the SQL script from `database/schema.sql`
 
 5. Start the development server:
    ```bash
@@ -80,6 +89,41 @@ A comprehensive fullstack personal finance management application built with Nex
    ```
 
 6. Open [http://localhost:3000](http://localhost:3000) in your browser
+
+## Database Management
+
+This application uses Supabase with a comprehensive migration system for database schema management.
+
+### Quick Start with Migrations
+
+```bash
+# Start local development database
+npm run db start
+
+# Apply all migrations and seed data
+npm run db reset
+
+# View database in Supabase Studio
+open http://localhost:54323
+```
+
+### Migration Commands
+
+```bash
+# Create new migration
+npm run db new add_feature
+
+# Apply pending migrations
+npm run db up
+
+# Check migration status
+npm run db status
+
+# Generate TypeScript types
+npm run db types
+```
+
+For detailed migration documentation, see [docs/MIGRATIONS.md](docs/MIGRATIONS.md).
 
 ## Database Schema
 
