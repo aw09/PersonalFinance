@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "node -e \"if(process.env.NODE_ENV==='production'&&(!process.env.NEXT_PUBLIC_SUPABASE_URL||!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)){console.error('❌ Missing required environment variables: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY');console.error('Please set these in your Railway project settings.');process.exit(1);}console.log('✅ Environment validated');\" && node .next/standalone/server.js",
+    "start": "node -e \"if(process.env.NODE_ENV==='production'&&(!process.env.NEXT_PUBLIC_SUPABASE_URL||!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)){console.error('❌ Missing required environment variables: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY');console.error('Please set these in your Railway project settings.');process.exit(1);}console.log('✅ Environment validated');const fs=require('fs');const path=require('path');const serverPath='.next/standalone/server.js';if(!fs.existsSync(serverPath)){console.error('❌ Server file not found at:',serverPath);console.error('Build may have failed. Check build logs.');process.exit(1);}console.log('✅ Server file found');try{const staticSrc='.next/static';const staticDest='.next/standalone/.next/static';const publicSrc='public';const publicDest='.next/standalone/public';if(fs.existsSync(staticSrc)){fs.cpSync(staticSrc,staticDest,{recursive:true,force:true});console.log('✅ Static files copied');}if(fs.existsSync(publicSrc)){fs.cpSync(publicSrc,publicDest,{recursive:true,force:true});console.log('✅ Public files copied');}}catch(e){console.error('❌ Failed to copy files:',e.message);process.exit(1);}\" && node .next/standalone/server.js",
     "start:dev": "next start",
     "lint": "next lint"
   },
