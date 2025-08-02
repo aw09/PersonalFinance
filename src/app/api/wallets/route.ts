@@ -3,19 +3,28 @@ import { createClient } from '@supabase/supabase-js'
 import { Database } from '@/types/database'
 
 export async function GET(request: NextRequest) {
-  const supabase = createClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-
   // Get the authorization header
   const authHeader = request.headers.get('authorization')
   if (!authHeader) {
     return NextResponse.json({ error: 'No authorization header' }, { status: 401 })
   }
 
-  // Set the session
   const token = authHeader.replace('Bearer ', '')
+  
+  // Create Supabase client with the user's session token
+  const supabase = createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
+    }
+  )
+
+  // Verify the user is authenticated
   const { data: { user }, error: authError } = await supabase.auth.getUser(token)
   
   if (authError || !user) {
@@ -42,19 +51,28 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = createClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-
   // Get the authorization header
   const authHeader = request.headers.get('authorization')
   if (!authHeader) {
     return NextResponse.json({ error: 'No authorization header' }, { status: 401 })
   }
 
-  // Set the session
   const token = authHeader.replace('Bearer ', '')
+  
+  // Create Supabase client with the user's session token
+  const supabase = createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
+    }
+  )
+
+  // Verify the user is authenticated
   const { data: { user }, error: authError } = await supabase.auth.getUser(token)
   
   if (authError || !user) {
