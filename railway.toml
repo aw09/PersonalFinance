@@ -4,14 +4,12 @@
 command = "npm run build"
 
 [deploy]
-startCommand = "node .next/standalone/server.js"
+startCommand = "npm start"
 
 # Environment variables needed:
-# NEXT_PUBLIC_SUPABASE_URL
-# NEXT_PUBLIC_SUPABASE_ANON_KEY
+# NEXT_PUBLIC_SUPABASE_URL (required)
+# NEXT_PUBLIC_SUPABASE_ANON_KEY (required)
 # SUPABASE_SERVICE_ROLE_KEY (optional)
 # TELEGRAM_BOT_TOKEN (optional)
 # OPENAI_API_KEY (optional)
-
-[env]
-PORT = "3000"
+# PORT (automatically set by Railway)

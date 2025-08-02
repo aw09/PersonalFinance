@@ -16,14 +16,25 @@
 1. Visit [railway.app](https://railway.app) and sign in with GitHub
 2. Click "New Project" → "Deploy from GitHub repo"
 3. Select this repository
-4. Set the following environment variables:
+4. **IMPORTANT**: Set these **required** environment variables in Railway:
    ```
    NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-   TELEGRAM_BOT_TOKEN=your_telegram_bot_token (optional)
-   OPENAI_API_KEY=your_openai_api_key (optional)
    ```
-5. Deploy!
+5. **Optional**: Set these additional environment variables for extra features:
+   ```
+   TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+   OPENAI_API_KEY=your_openai_api_key
+   SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+   ```
+6. **Do NOT set a PORT environment variable** - Railway handles this automatically
+7. Deploy!
+
+### Railway-Specific Notes
+- The deployment uses `npm start` command which runs the optimized standalone server
+- PORT is automatically assigned by Railway - do not override it
+- Environment variables are validated on startup - missing required variables will cause deployment to fail with clear error messages
+- Check Railway logs if deployment fails for specific error details
 
 ### Step 3: Set up Telegram Bot (Optional)
 1. Create a bot with [@BotFather](https://t.me/botfather) on Telegram
