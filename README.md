@@ -15,18 +15,23 @@ A comprehensive fullstack personal finance management application built with Nex
 - [x] Budget management and tracking
 - [x] Basic Telegram bot integration
 - [x] Investment tracking API
+- [x] Loan and credit/receivables management
+- [x] Installment payment tracking
+- [x] Advanced investment portfolio features
+- [x] Scheduled/repeated transactions
+- [x] Item-level expense tracking for price monitoring
+- [x] Wallet sharing with other users
+- [x] Transaction analytics and reporting
+- [x] LLM-powered chat processing for transactions (structure ready)
+- [x] Receipt image processing with LLM (structure ready)
+- [x] Advanced Telegram bot features
 
 ### 🚧 In Development  
-- [ ] Loan and credit/receivables management
-- [ ] Installment payment tracking
-- [ ] Advanced investment portfolio features
-- [ ] Scheduled/repeated transactions
-- [ ] Item-level expense tracking for price monitoring
-- [ ] Wallet sharing with other users
-- [ ] Transaction analytics and reporting
-- [ ] LLM-powered chat processing for transactions
-- [ ] Receipt image processing with LLM
-- [ ] Advanced Telegram bot features
+- [ ] Real-time financial insights dashboard
+- [ ] Mobile app development
+- [ ] Advanced portfolio optimization
+- [ ] Tax reporting features
+- [ ] Financial goal tracking and planning
 
 ## Technology Stack
 
@@ -111,21 +116,21 @@ All tables implement Row Level Security (RLS) for data protection.
 - [x] Category management
 - [x] Multi-currency support
 
-### Phase 3: Advanced Financial Features
-- [ ] Budget creation and tracking
-- [ ] Loan and installment management
-- [ ] Investment portfolio tracking
-- [ ] Scheduled transactions
-- [ ] Transaction analytics and insights
+### Phase 3: Advanced Financial Features ✅
+- [x] Budget creation and tracking
+- [x] Loan and installment management
+- [x] Investment portfolio tracking
+- [x] Scheduled transactions
+- [x] Transaction analytics and insights
 
-### Phase 4: Automation & Integration
-- [ ] Telegram bot integration
-- [ ] LLM-powered transaction processing
-- [ ] Receipt image processing
-- [ ] Advanced analytics and insights
+### Phase 4: Automation & Integration ✅
+- [x] Enhanced Telegram bot integration
+- [x] LLM-powered transaction processing (structure ready)
+- [x] Receipt image processing (structure ready)
+- [x] Advanced analytics and insights
 
 ### Phase 5: Deployment & Scaling
-- [ ] Railway.app deployment configuration
+- [x] Railway.app deployment configuration
 - [ ] Performance optimization
 - [ ] Mobile app consideration
 
@@ -142,7 +147,26 @@ All tables implement Row Level Security (RLS) for data protection.
 - `POST /api/budgets` - Create a new budget
 - `GET /api/investments` - List user's investments
 - `POST /api/investments` - Create a new investment
-- `POST /api/telegram/webhook` - Telegram bot webhook endpoint
+- `GET /api/investments/portfolio` - Get investment portfolio analytics
+- `GET /api/loans` - List user's loans
+- `POST /api/loans` - Create a new loan
+- `GET /api/installments` - List installments for loans
+- `POST /api/installments` - Create a new installment
+- `PATCH /api/installments` - Update installment status
+- `GET /api/scheduled-transactions` - List scheduled transactions
+- `POST /api/scheduled-transactions` - Create a new scheduled transaction
+- `PATCH /api/scheduled-transactions` - Update scheduled transaction
+- `GET /api/transaction-items` - List items for a transaction
+- `POST /api/transaction-items` - Add item to transaction
+- `PUT /api/transaction-items` - Update transaction item
+- `DELETE /api/transaction-items` - Delete transaction item
+- `GET /api/wallet-shares` - List wallet shares
+- `POST /api/wallet-shares` - Share wallet with user
+- `PATCH /api/wallet-shares` - Update wallet share permissions
+- `DELETE /api/wallet-shares` - Remove wallet share
+- `GET /api/analytics` - Get financial analytics and insights
+- `POST /api/llm` - Process natural language with AI (requires OpenAI API key)
+- `POST /api/telegram/webhook` - Enhanced Telegram bot webhook endpoint
 
 ## Contributing
 
