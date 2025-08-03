@@ -78,16 +78,32 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate that the wallet belongs to the user
-    const { data: wallet, error: walletError } = await supabase
+    // First check if wallet exists at all
+    const { data: walletCheck, error: walletCheckError } = await supabase
       .from('wallets')
-      .select('id')
+      .select('id, owner_id')
       .eq('id', wallet_id)
-      .eq('owner_id', user.id)
       .single()
 
-    if (walletError || !wallet) {
-      return NextResponse.json({ error: 'Invalid wallet' }, { status: 400 })
+    if (walletCheckError || !walletCheck) {
+      console.error('Wallet not found:', {
+        wallet_id,
+        walletCheckError
+      })
+      return NextResponse.json({ error: 'Wallet not found' }, { status: 400 })
     }
+
+    // Check if wallet belongs to current user
+    if (walletCheck.owner_id !== user.id) {
+      console.error('Wallet ownership mismatch:', {
+        wallet_id,
+        wallet_owner_id: walletCheck.owner_id,
+        current_user_id: user.id
+      })
+      return NextResponse.json({ error: 'Invalid wallet - not owned by user' }, { status: 400 })
+    }
+
+    const wallet = walletCheck
 
     const { data: budget, error } = await supabase
       .from('budgets')
