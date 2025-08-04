@@ -5,6 +5,10 @@ import { ThemeSupa } from '@supabase/auth-ui-shared'
 import { supabase } from '@/lib/supabase'
 
 export default function AuthComponent() {
+  // Use NEXT_PUBLIC_SITE_URL if available, otherwise fall back to window.location.origin
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== 'undefined' ? window.location.origin : '')
+  const redirectTo = `${siteUrl}/auth/callback`
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
@@ -31,7 +35,7 @@ export default function AuthComponent() {
               },
             }}
             providers={[]}
-            redirectTo={`${window.location.origin}/auth/callback`}
+            redirectTo={redirectTo}
           />
         </div>
       </div>
