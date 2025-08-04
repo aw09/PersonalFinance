@@ -1,90 +1,50 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-import { Database } from '@/types/database'
+
+import { NextRequest, NextResponse } from 'next/server';
+import { Database } from '@/types/database';
 
 export async function GET(request: NextRequest) {
-  // Get the authorization header
-  const authHeader = request.headers.get('authorization')
-  if (!authHeader) {
-    return NextResponse.json({ error: 'No authorization header' }, { status: 401 })
+  const { getSupabaseUser, createAuthSupabase, getAuthToken } = await import('@/lib/authSupabase');
+  const user = await getSupabaseUser(request);
+  if (!user) {
+    return NextResponse.json({ error: 'Invalid or missing token' }, { status: 401 });
   }
-
-  const token = authHeader.replace('Bearer ', '')
-  
-  // Create Supabase client with the user's session token
-  const supabase = createClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      global: {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      }
-    }
-  )
-
-  // Verify the user is authenticated
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-  
-  if (authError || !user) {
-    return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
-  }
+  const token = getAuthToken(request)!;
+  const supabase = createAuthSupabase(token);
 
   try {
     const { data: wallets, error } = await supabase
       .from('wallets')
       .select('*')
       .eq('owner_id', user.id)
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching wallets:', error)
-      return NextResponse.json({ error: 'Failed to fetch wallets' }, { status: 500 })
+      console.error('Error fetching wallets:', error);
+      return NextResponse.json({ error: 'Failed to fetch wallets' }, { status: 500 });
     }
 
-    return NextResponse.json({ wallets })
+    return NextResponse.json({ wallets });
   } catch (error) {
-    console.error('Unexpected error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    console.error('Unexpected error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
-  // Get the authorization header
-  const authHeader = request.headers.get('authorization')
-  if (!authHeader) {
-    return NextResponse.json({ error: 'No authorization header' }, { status: 401 })
+  const { getSupabaseUser, createAuthSupabase, getAuthToken } = await import('@/lib/authSupabase');
+  const user = await getSupabaseUser(request);
+  if (!user) {
+    return NextResponse.json({ error: 'Invalid or missing token' }, { status: 401 });
   }
-
-  const token = authHeader.replace('Bearer ', '')
-  
-  // Create Supabase client with the user's session token
-  const supabase = createClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      global: {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      }
-    }
-  )
-
-  // Verify the user is authenticated
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-  
-  if (authError || !user) {
-    return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
-  }
+  const token = getAuthToken(request)!;
+  const supabase = createAuthSupabase(token);
 
   try {
-    const body = await request.json()
-    const { name, description, currency = 'USD' } = body
+    const body = await request.json();
+    const { name, description, currency = 'USD' } = body;
 
     if (!name) {
-      return NextResponse.json({ error: 'Wallet name is required' }, { status: 400 })
+      return NextResponse.json({ error: 'Wallet name is required' }, { status: 400 });
     }
 
     // Ensure the user profile exists before creating wallet
@@ -92,7 +52,7 @@ export async function POST(request: NextRequest) {
       .from('profiles')
       .select('id')
       .eq('id', user.id)
-      .single()
+      .single();
 
     // If profile doesn't exist, create it
     if (!existingProfile) {
@@ -102,11 +62,11 @@ export async function POST(request: NextRequest) {
           id: user.id,
           email: user.email || '',
           full_name: user.user_metadata?.full_name || null
-        })
+        });
 
       if (profileError) {
-        console.error('Error creating profile:', profileError)
-        return NextResponse.json({ error: 'Failed to create user profile' }, { status: 500 })
+        console.error('Error creating profile:', profileError);
+        return NextResponse.json({ error: 'Failed to create user profile' }, { status: 500 });
       }
     }
 
@@ -119,16 +79,16 @@ export async function POST(request: NextRequest) {
         owner_id: user.id
       })
       .select()
-      .single()
+      .single();
 
     if (error) {
-      console.error('Error creating wallet:', error)
-      return NextResponse.json({ error: 'Failed to create wallet' }, { status: 500 })
+      console.error('Error creating wallet:', error);
+      return NextResponse.json({ error: 'Failed to create wallet' }, { status: 500 });
     }
 
-    return NextResponse.json({ wallet }, { status: 201 })
+    return NextResponse.json({ wallet }, { status: 201 });
   } catch (error) {
-    console.error('Unexpected error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    console.error('Unexpected error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

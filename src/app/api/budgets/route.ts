@@ -1,24 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { Database } from '@/types/database'
 
 export async function GET(request: NextRequest) {
-  const supabase = createClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-
-  const authHeader = request.headers.get('authorization')
-  if (!authHeader) {
-    return NextResponse.json({ error: 'No authorization header' }, { status: 401 })
+  const { getSupabaseUser, createAuthSupabase, getAuthToken } = await import('@/lib/authSupabase');
+  const user = await getSupabaseUser(request);
+  if (!user) {
+    return NextResponse.json({ error: 'Invalid or missing token' }, { status: 401 });
   }
-
-  const token = authHeader.replace('Bearer ', '')
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-  
-  if (authError || !user) {
-    return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
-  }
+  const token = getAuthToken(request)!;
+  const supabase = createAuthSupabase(token);
 
   try {
     const { data: budgets, error } = await supabase
@@ -44,48 +34,35 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = createClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-
-  const authHeader = request.headers.get('authorization')
-  if (!authHeader) {
-    return NextResponse.json({ error: 'No authorization header' }, { status: 401 })
+  const { getSupabaseUser, createAuthSupabase, getAuthToken } = await import('@/lib/authSupabase');
+  const user = await getSupabaseUser(request);
+  if (!user) {
+    return NextResponse.json({ error: 'Invalid or missing token' }, { status: 401 });
   }
-
-  const token = authHeader.replace('Bearer ', '')
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-  
-  if (authError || !user) {
-    return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
-  }
+  const token = getAuthToken(request)!;
+  const supabase = createAuthSupabase(token);
 
   try {
     const body = await request.json()
     const { name, amount, period = 'monthly', category_id, wallet_id, start_date, end_date } = body
 
     if (!name || !amount || !wallet_id) {
-      return NextResponse.json({ 
-        error: 'Name, amount, and wallet_id are required' 
-      }, { status: 400 })
+      return NextResponse.json({ error: 'Name, amount, and wallet_id are required' }, { status: 400 })
     }
 
     if (!['weekly', 'monthly', 'yearly'].includes(period)) {
-      return NextResponse.json({ 
-        error: 'Period must be weekly, monthly, or yearly' 
-      }, { status: 400 })
+      return NextResponse.json({ error: 'Period must be weekly, monthly, or yearly' }, { status: 400 })
     }
 
-    // Validate that the wallet belongs to the user
+    // Validate wallet access using authenticated client (RLS enforced)
     const { data: wallet, error: walletError } = await supabase
       .from('wallets')
       .select('id')
       .eq('id', wallet_id)
-      .eq('owner_id', user.id)
       .single()
 
     if (walletError || !wallet) {
+      console.error('Wallet access denied:', walletError)
       return NextResponse.json({ error: 'Invalid wallet' }, { status: 400 })
     }
 
