@@ -1,29 +1,20 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-import { Database } from '@/types/database'
+
+import { NextRequest, NextResponse } from 'next/server';
+import { Database } from '@/types/database';
 
 export async function GET(request: NextRequest) {
-  const supabase = createClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-
-  const authHeader = request.headers.get('authorization')
-  if (!authHeader) {
-    return NextResponse.json({ error: 'No authorization header' }, { status: 401 })
+  const { getSupabaseUser, createAuthSupabase, getAuthToken } = await import('@/lib/authSupabase');
+  const user = await getSupabaseUser(request);
+  if (!user) {
+    return NextResponse.json({ error: 'Invalid or missing token' }, { status: 401 });
   }
-
-  const token = authHeader.replace('Bearer ', '')
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-  
-  if (authError || !user) {
-    return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
-  }
+  const token = getAuthToken(request)!;
+  const supabase = createAuthSupabase(token);
 
   try {
-    const { searchParams } = new URL(request.url)
-    const walletId = searchParams.get('wallet_id')
-    const limit = parseInt(searchParams.get('limit') || '10')
+    const { searchParams } = new URL(request.url);
+    const walletId = searchParams.get('wallet_id');
+    const limit = parseInt(searchParams.get('limit') || '10');
 
     let query = supabase
       .from('transactions')
@@ -34,58 +25,49 @@ export async function GET(request: NextRequest) {
       `)
       .eq('user_id', user.id)
       .order('date', { ascending: false })
-      .limit(limit)
+      .limit(limit);
 
     if (walletId) {
-      query = query.eq('wallet_id', walletId)
+      query = query.eq('wallet_id', walletId);
     }
 
-    const { data: transactions, error } = await query
+    const { data: transactions, error } = await query;
 
     if (error) {
-      console.error('Error fetching transactions:', error)
-      return NextResponse.json({ error: 'Failed to fetch transactions' }, { status: 500 })
+      console.error('Error fetching transactions:', error);
+      return NextResponse.json({ error: 'Failed to fetch transactions' }, { status: 500 });
     }
 
-    return NextResponse.json({ transactions })
+    return NextResponse.json({ transactions });
   } catch (error) {
-    console.error('Unexpected error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    console.error('Unexpected error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = createClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-
-  const authHeader = request.headers.get('authorization')
-  if (!authHeader) {
-    return NextResponse.json({ error: 'No authorization header' }, { status: 401 })
+  const { getSupabaseUser, createAuthSupabase, getAuthToken } = await import('@/lib/authSupabase');
+  const user = await getSupabaseUser(request);
+  if (!user) {
+    return NextResponse.json({ error: 'Invalid or missing token' }, { status: 401 });
   }
-
-  const token = authHeader.replace('Bearer ', '')
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-  
-  if (authError || !user) {
-    return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
-  }
+  const token = getAuthToken(request)!;
+  const supabase = createAuthSupabase(token);
 
   try {
-    const body = await request.json()
-    const { amount, description, type, category_id, wallet_id, date } = body
+    const body = await request.json();
+    const { amount, description, type, category_id, wallet_id, date } = body;
 
     if (!amount || !description || !type || !wallet_id) {
       return NextResponse.json({ 
         error: 'Amount, description, type, and wallet_id are required' 
-      }, { status: 400 })
+      }, { status: 400 });
     }
 
     if (!['income', 'expense', 'transfer'].includes(type)) {
       return NextResponse.json({ 
         error: 'Type must be income, expense, or transfer' 
-      }, { status: 400 })
+      }, { status: 400 });
     }
 
     // Validate that the wallet belongs to the user
@@ -94,14 +76,14 @@ export async function POST(request: NextRequest) {
       .select('id')
       .eq('id', wallet_id)
       .eq('owner_id', user.id)
-      .single()
+      .single();
 
     if (walletError || !wallet) {
-      return NextResponse.json({ error: 'Invalid wallet' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid wallet' }, { status: 400 });
     }
 
     // For expenses, make amount negative
-    const finalAmount = type === 'expense' ? -Math.abs(amount) : Math.abs(amount)
+    const finalAmount = type === 'expense' ? -Math.abs(amount) : Math.abs(amount);
 
     const { data: transaction, error } = await supabase
       .from('transactions')
@@ -119,16 +101,16 @@ export async function POST(request: NextRequest) {
         categories (name, color, icon),
         wallets (name, currency)
       `)
-      .single()
+      .single();
 
     if (error) {
-      console.error('Error creating transaction:', error)
-      return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 })
+      console.error('Error creating transaction:', error);
+      return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 });
     }
 
-    return NextResponse.json({ transaction }, { status: 201 })
+    return NextResponse.json({ transaction }, { status: 201 });
   } catch (error) {
-    console.error('Unexpected error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    console.error('Unexpected error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
