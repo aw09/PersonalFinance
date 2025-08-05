@@ -3,7 +3,7 @@
 # Switch to Docker build since it works locally
 [build]
 builder = "dockerfile"
-buildArguments = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"]
+buildArguments = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "NEXT_PUBLIC_SITE_URL"]
 
 [deploy]
 restartPolicyType = "on_failure"
@@ -12,6 +12,7 @@ restartPolicyType = "on_failure"
 # Required environment variables:
 # - NEXT_PUBLIC_SUPABASE_URL
 # - NEXT_PUBLIC_SUPABASE_ANON_KEY
+# - NEXT_PUBLIC_SITE_URL
 #
 # Optional environment variables:
 # - SUPABASE_SERVICE_ROLE_KEY
