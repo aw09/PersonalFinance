@@ -9,12 +9,14 @@ import TransactionList from '@/components/transactions/TransactionList'
 import AddTransactionModal from '@/components/transactions/AddTransactionModal'
 import BudgetList from '@/components/budgets/BudgetList'
 import CreateBudgetModal from '@/components/budgets/CreateBudgetModal'
+import TelegramLinkComponent from '@/components/telegram/TelegramLinkComponent'
 
 export default function Dashboard() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [showAddTransaction, setShowAddTransaction] = useState(false)
   const [showCreateBudget, setShowCreateBudget] = useState(false)
+  const [showTelegramLink, setShowTelegramLink] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const router = useRouter()
 
@@ -139,6 +141,13 @@ export default function Dashboard() {
               >
                 Create Budget
               </button>
+              <button 
+                onClick={() => setShowTelegramLink(true)}
+                className="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition flex items-center justify-center"
+              >
+                <span className="mr-2">📱</span>
+                Link Telegram
+              </button>
               <button className="w-full bg-yellow-600 text-white py-2 px-4 rounded-md hover:bg-yellow-700 transition">
                 Track Investment
               </button>
@@ -161,6 +170,28 @@ export default function Dashboard() {
         onClose={() => setShowCreateBudget(false)}
         onBudgetCreated={handleDataUpdated}
       />
+
+      {/* Telegram Link Modal */}
+      {showTelegramLink && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto relative">
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
+              <h2 className="text-lg font-semibold text-gray-900">Telegram Integration</h2>
+              <button
+                onClick={() => setShowTelegramLink(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6">
+              <TelegramLinkComponent />
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
