@@ -257,7 +257,9 @@ async function handleMenuNavigation(data: string, chatId: number, messageId: num
 // The file is getting quite large - let me continue with the operation handlers...
 
 async function handleWalletOperation(data: string, chatId: number, messageId: number, botToken: string, telegramUserId: number) {
-  const operation = data.replace('wallet_', '')
+  const parts = data.split('_')
+  const operation = parts[1]
+  const walletId = parts.length > 2 ? parts[2] : null
 
   switch (operation) {
     case 'list':
@@ -287,8 +289,117 @@ async function handleWalletOperation(data: string, chatId: number, messageId: nu
         cancelKeyboard)
       break
 
+    case 'view':
+    case 'edit': 
+    case 'delete':
+      if (walletId) {
+        // Handle specific wallet action
+        return await handleSpecificWalletAction(operation, walletId, chatId, messageId, botToken, telegramUserId)
+      } else {
+        // Show wallet selection
+        const allWallets = await getTelegramUserWallets(telegramUserId)
+        if (allWallets.length === 0) {
+          await editTelegramMessage(botToken, chatId, messageId, 
+            '❌ No wallets found. Create your first wallet!', 
+            backKeyboard('wallets'))
+          return
+        }
+        
+        let actionText = operation === 'view' ? 'View' : operation === 'edit' ? 'Edit' : 'Delete'
+        let actionEmoji = operation === 'view' ? '👁️' : operation === 'edit' ? '✏️' : '🗑️'
+        
+        let selectText = `${actionEmoji} <b>${actionText} Wallet</b>\n\nSelect a wallet:\n\n`
+        const walletSelectKeyboard: any = { inline_keyboard: [] }
+        
+        allWallets.forEach((wallet, index) => {
+          selectText += `${index + 1}. ${wallet.name} (${formatCurrency(wallet.balance, wallet.currency)})\n`
+          walletSelectKeyboard.inline_keyboard.push([
+            { text: `💼 ${wallet.name}`, callback_data: `wallet_${operation}_${wallet.id}` }
+          ])
+        })
+        
+        walletSelectKeyboard.inline_keyboard.push([
+          { text: '🔙 Back', callback_data: 'menu_wallets' }
+        ])
+        
+        await editTelegramMessage(botToken, chatId, messageId, selectText, walletSelectKeyboard)
+      }
+      break
+
     default:
-      await editTelegramMessage(botToken, chatId, messageId, 'Feature coming soon!', backKeyboard('wallets'))
+      await editTelegramMessage(botToken, chatId, messageId, 'Unknown wallet operation!', backKeyboard('wallets'))
+  }
+}
+
+async function handleSpecificWalletAction(
+  action: string, 
+  walletId: string, 
+  chatId: number, 
+  messageId: number, 
+  botToken: string, 
+  telegramUserId: number
+) {
+  try {
+    const wallets = await getTelegramUserWallets(telegramUserId)
+    const wallet = wallets.find(w => w.id === walletId)
+    
+    if (!wallet) {
+      await editTelegramMessage(botToken, chatId, messageId, 
+        '❌ Wallet not found!', backKeyboard('wallets'))
+      return
+    }
+
+    switch (action) {
+      case 'view':
+        let viewText = `👁️ <b>Wallet Details</b>\n\n`
+        viewText += `💼 <b>Name:</b> ${wallet.name}\n`
+        viewText += `💰 <b>Balance:</b> ${formatCurrency(wallet.balance, wallet.currency)}\n`
+        viewText += `💱 <b>Currency:</b> ${wallet.currency}\n`
+        if (wallet.description) {
+          viewText += `📝 <b>Description:</b> ${wallet.description}\n`
+        }
+        viewText += `📅 <b>Created:</b> ${formatDate(wallet.created_at)}\n`
+        
+        const viewKeyboard = {
+          inline_keyboard: [
+            [
+              { text: '✏️ Edit', callback_data: `wallet_edit_${walletId}` },
+              { text: '🗑️ Delete', callback_data: `wallet_delete_${walletId}` }
+            ],
+            [
+              { text: '🔙 Back to Wallets', callback_data: 'menu_wallets' }
+            ]
+          ]
+        }
+        
+        await editTelegramMessage(botToken, chatId, messageId, viewText, viewKeyboard)
+        break
+
+      case 'delete':
+        const confirmText = `🗑️ <b>Delete Wallet</b>\n\n` +
+          `Are you sure you want to delete "${wallet.name}"?\n\n` +
+          `⚠️ <b>Warning:</b> This action cannot be undone!`
+        
+        const confirmKeyboard = {
+          inline_keyboard: [
+            [
+              { text: '✅ Yes, Delete', callback_data: `confirm_delete_wallet_${walletId}` },
+              { text: '❌ Cancel', callback_data: `wallet_view_${walletId}` }
+            ]
+          ]
+        }
+        
+        await editTelegramMessage(botToken, chatId, messageId, confirmText, confirmKeyboard)
+        break
+
+      case 'edit':
+        await editTelegramMessage(botToken, chatId, messageId, 
+          '✏️ Wallet editing coming soon!', backKeyboard('wallets'))
+        break
+    }
+  } catch (error) {
+    console.error('Error handling wallet action:', error)
+    await editTelegramMessage(botToken, chatId, messageId, errorMessages.generic, backKeyboard('wallets'))
   }
 }
 
@@ -414,6 +525,26 @@ async function handleCategoryOperation(data: string, chatId: number, messageId: 
       await editTelegramMessage(botToken, chatId, messageId, categoryText, backKeyboard('categories'))
       break
 
+    case 'create':
+      await setTelegramSession(telegramUserId, chatId, {}, 'category_create_type')
+      
+      const typeKeyboard = {
+        inline_keyboard: [
+          [
+            { text: '💚 Income Category', callback_data: 'select_category_type_income' },
+            { text: '💸 Expense Category', callback_data: 'select_category_type_expense' }
+          ],
+          [
+            { text: '❌ Cancel', callback_data: 'cancel' }
+          ]
+        ]
+      }
+      
+      await editTelegramMessage(botToken, chatId, messageId, 
+        '🏷️ <b>Create New Category</b>\n\nWhat type of category do you want to create?',
+        typeKeyboard)
+      break
+
     default:
       await editTelegramMessage(botToken, chatId, messageId, 'Feature coming soon!', backKeyboard('categories'))
   }
@@ -523,6 +654,57 @@ async function handleSelection(data: string, chatId: number, messageId: number, 
       `💰 <b>Add ${type === 'income' ? 'Income' : 'Expense'}</b>\n\nEnter the amount (numbers only):`,
       cancelKeyboard
     )
+  } else if (data.startsWith('select_category_type_')) {
+    const type = data.replace('select_category_type_', '')
+    sessionData.type = type
+    
+    await setTelegramSession(telegramUserId, chatId, sessionData, 'category_create_name')
+    await editTelegramMessage(
+      botToken,
+      chatId,
+      messageId,
+      `🏷️ <b>Create ${type === 'income' ? 'Income' : 'Expense'} Category</b>\n\nEnter the category name:`,
+      cancelKeyboard
+    )
+  } else if (data.startsWith('select_category_')) {
+    const categoryPart = data.replace('select_category_', '')
+    
+    if (categoryPart.startsWith('type_')) {
+      // This is already handled above
+      return
+    }
+    
+    const categoryId = categoryPart === 'skip' ? null : categoryPart
+    sessionData.categoryId = categoryId
+    
+    // Create the transaction
+    try {
+      const transaction = await createTelegramUserTransaction(
+        telegramUserId,
+        sessionData.walletId,
+        sessionData.amount,
+        sessionData.description,
+        sessionData.type,
+        categoryId || undefined
+      )
+      
+      await clearTelegramSession(telegramUserId)
+      await editTelegramMessage(
+        botToken,
+        chatId,
+        messageId,
+        `✅ <b>Transaction Added!</b>\n\n` +
+        `${sessionData.type === 'income' ? '💚' : '💸'} ${sessionData.description}\n` +
+        `💰 Amount: ${formatCurrency(sessionData.amount)}\n` +
+        `💼 Wallet: ${(transaction as any).wallets?.name}\n` +
+        (categoryId && (transaction as any).categories ? `🏷️ Category: ${(transaction as any).categories.name}\n` : '') +
+        `\nYour transaction has been recorded successfully!`,
+        mainMenuKeyboard
+      )
+    } catch (error) {
+      console.error('Error creating transaction:', error)
+      await editTelegramMessage(botToken, chatId, messageId, errorMessages.generic, mainMenuKeyboard)
+    }
   }
 }
 
@@ -534,8 +716,28 @@ async function handleConfirmation(data: string, chatId: number, messageId: numbe
   }
 
   // Handle specific confirmations
-  if (data.startsWith('confirm_')) {
-    // Implementation for specific confirmations would go here
+  if (data.startsWith('confirm_delete_wallet_')) {
+    const walletId = data.replace('confirm_delete_wallet_', '')
+    const { deleteTelegramUserWallet } = await import('@/lib/telegramCrud')
+    
+    try {
+      await deleteTelegramUserWallet(telegramUserId, walletId)
+      await editTelegramMessage(
+        botToken, 
+        chatId, 
+        messageId, 
+        '✅ <b>Wallet Deleted!</b>\n\nThe wallet has been successfully deleted.',
+        mainMenuKeyboard
+      )
+    } catch (error: any) {
+      let errorMsg = errorMessages.generic
+      if (error.message?.includes('existing transactions')) {
+        errorMsg = '❌ Cannot delete wallet with existing transactions. Please delete all transactions first.'
+      }
+      await editTelegramMessage(botToken, chatId, messageId, errorMsg, backKeyboard('wallets'))
+    }
+  } else if (data.startsWith('confirm_')) {
+    // Handle other confirmations
     await editTelegramMessage(botToken, chatId, messageId, 'Feature coming soon!', mainMenuKeyboard)
   }
 }
@@ -620,13 +822,78 @@ async function handleConversationStep(session: any, message: any, botToken: stri
       
       sessionData.description = text
       
-      // Create the transaction
+      // Get categories for this transaction type
+      const categories = await getTelegramUserCategories(telegramUserId)
+      const relevantCategories = categories.filter(c => c.type === sessionData.type)
+      
+      if (relevantCategories.length === 0) {
+        // Create transaction without category
+        try {
+          const transaction = await createTelegramUserTransaction(
+            telegramUserId,
+            sessionData.walletId,
+            sessionData.amount,
+            sessionData.description,
+            sessionData.type
+          )
+          
+          await clearTelegramSession(telegramUserId)
+          await sendTelegramMessage(
+            botToken, 
+            chatId, 
+            `✅ <b>Transaction Added!</b>\n\n` +
+            `${sessionData.type === 'income' ? '💚' : '💸'} ${sessionData.description}\n` +
+            `💰 Amount: ${formatCurrency(sessionData.amount)}\n` +
+            `💼 Wallet: ${(transaction as any).wallets?.name}\n\n` +
+            `Your transaction has been recorded successfully!`,
+            mainMenuKeyboard
+          )
+        } catch (error) {
+          console.error('Error creating transaction:', error)
+          await sendTelegramMessage(botToken, chatId, errorMessages.generic, mainMenuKeyboard)
+        }
+      } else {
+        // Show category selection
+        await setTelegramSession(telegramUserId, chatId, sessionData, 'transaction_create_category')
+        
+        let categoryText = `💰 <b>Add ${sessionData.type === 'income' ? 'Income' : 'Expense'}</b>\n\n`
+        categoryText += `${sessionData.type === 'income' ? '💚' : '💸'} ${sessionData.description}\n`
+        categoryText += `💰 Amount: ${formatCurrency(sessionData.amount)}\n\n`
+        categoryText += `Select a category (or skip):\n\n`
+        
+        const categoryKeyboard: any = { inline_keyboard: [] }
+        
+        relevantCategories.forEach((category) => {
+          categoryKeyboard.inline_keyboard.push([
+            { text: `🏷️ ${category.name}`, callback_data: `select_category_${category.id}` }
+          ])
+        })
+        
+        categoryKeyboard.inline_keyboard.push([
+          { text: '⏭️ Skip Category', callback_data: 'select_category_skip' }
+        ])
+        categoryKeyboard.inline_keyboard.push([
+          { text: '❌ Cancel', callback_data: 'cancel' }
+        ])
+        
+        await sendTelegramMessage(botToken, chatId, categoryText, categoryKeyboard)
+      }
+      break
+
+    case 'category_create_name':
+      if (!text) {
+        await sendTelegramMessage(botToken, chatId, '❌ Please enter a valid category name.')
+        return NextResponse.json({ ok: true })
+      }
+      
+      sessionData.name = text
+      
+      // Create the category
       try {
-        const transaction = await createTelegramUserTransaction(
+        const { createTelegramUserCategory } = await import('@/lib/telegramCrud')
+        const category = await createTelegramUserCategory(
           telegramUserId,
-          sessionData.walletId,
-          sessionData.amount,
-          sessionData.description,
+          sessionData.name,
           sessionData.type
         )
         
@@ -634,15 +901,14 @@ async function handleConversationStep(session: any, message: any, botToken: stri
         await sendTelegramMessage(
           botToken, 
           chatId, 
-          `✅ <b>Transaction Added!</b>\n\n` +
-          `${sessionData.type === 'income' ? '💚' : '💸'} ${sessionData.description}\n` +
-          `💰 Amount: ${formatCurrency(sessionData.amount)}\n` +
-          `💼 Wallet: ${(transaction as any).wallets?.name}\n\n` +
-          `Your transaction has been recorded successfully!`,
+          `✅ <b>Category Created!</b>\n\n` +
+          `🏷️ Name: ${category.name}\n` +
+          `${sessionData.type === 'income' ? '💚' : '💸'} Type: ${sessionData.type}\n\n` +
+          `Your category is ready to use!`,
           mainMenuKeyboard
         )
       } catch (error) {
-        console.error('Error creating transaction:', error)
+        console.error('Error creating category:', error)
         await sendTelegramMessage(botToken, chatId, errorMessages.generic, mainMenuKeyboard)
       }
       break

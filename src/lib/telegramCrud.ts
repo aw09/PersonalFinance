@@ -62,6 +62,85 @@ export async function createTelegramUserWallet(
   return wallet;
 }
 
+export async function updateTelegramUserWallet(
+  telegramUserId: number,
+  walletId: string,
+  updates: { name?: string; description?: string; currency?: string }
+) {
+  const supabase = createTelegramSupabase();
+  
+  // Get user ID
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('telegram_user_id', telegramUserId)
+    .single();
+
+  if (!profile) {
+    throw new Error('User not found');
+  }
+
+  const { data: wallet, error } = await supabase
+    .from('wallets')
+    .update({
+      ...updates,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', walletId)
+    .eq('owner_id', profile.id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating wallet:', error);
+    throw error;
+  }
+
+  return wallet;
+}
+
+export async function deleteTelegramUserWallet(
+  telegramUserId: number,
+  walletId: string
+) {
+  const supabase = createTelegramSupabase();
+  
+  // Get user ID
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('telegram_user_id', telegramUserId)
+    .single();
+
+  if (!profile) {
+    throw new Error('User not found');
+  }
+
+  // Check if wallet has transactions
+  const { count } = await supabase
+    .from('transactions')
+    .select('*', { count: 'exact', head: true })
+    .eq('wallet_id', walletId)
+    .eq('user_id', profile.id);
+
+  if (count && count > 0) {
+    throw new Error('Cannot delete wallet with existing transactions');
+  }
+
+  const { error } = await supabase
+    .from('wallets')
+    .delete()
+    .eq('id', walletId)
+    .eq('owner_id', profile.id);
+
+  if (error) {
+    console.error('Error deleting wallet:', error);
+    throw error;
+  }
+
+  return true;
+}
+
 // Transaction operations
 export async function getTelegramUserTransactions(
   telegramUserId: number,
@@ -150,6 +229,83 @@ export async function createTelegramUserTransaction(
   }
 
   return transaction;
+}
+
+export async function updateTelegramUserTransaction(
+  telegramUserId: number,
+  transactionId: string,
+  updates: { 
+    amount?: number; 
+    description?: string; 
+    type?: 'income' | 'expense';
+    category_id?: string;
+  }
+) {
+  const supabase = createTelegramSupabase();
+  
+  // Get user ID
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('telegram_user_id', telegramUserId)
+    .single();
+
+  if (!profile) {
+    throw new Error('User not found');
+  }
+
+  const { data: transaction, error } = await supabase
+    .from('transactions')
+    .update({
+      ...updates,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', transactionId)
+    .eq('user_id', profile.id)
+    .select(`
+      *,
+      categories (name, color, icon),
+      wallets (name, currency)
+    `)
+    .single();
+
+  if (error) {
+    console.error('Error updating transaction:', error);
+    throw error;
+  }
+
+  return transaction;
+}
+
+export async function deleteTelegramUserTransaction(
+  telegramUserId: number,
+  transactionId: string
+) {
+  const supabase = createTelegramSupabase();
+  
+  // Get user ID
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('telegram_user_id', telegramUserId)
+    .single();
+
+  if (!profile) {
+    throw new Error('User not found');
+  }
+
+  const { error } = await supabase
+    .from('transactions')
+    .delete()
+    .eq('id', transactionId)
+    .eq('user_id', profile.id);
+
+  if (error) {
+    console.error('Error deleting transaction:', error);
+    throw error;
+  }
+
+  return true;
 }
 
 // Category operations
