@@ -252,6 +252,8 @@ async function handleMenuNavigation(data: string, chatId: number, messageId: num
     default:
       await editTelegramMessage(botToken, chatId, messageId, errorMessages.generic, mainMenuKeyboard)
   }
+  
+  return NextResponse.json({ ok: true })
 }
 
 // The file is getting quite large - let me continue with the operation handlers...
@@ -329,6 +331,8 @@ async function handleWalletOperation(data: string, chatId: number, messageId: nu
     default:
       await editTelegramMessage(botToken, chatId, messageId, 'Unknown wallet operation!', backKeyboard('wallets'))
   }
+  
+  return NextResponse.json({ ok: true })
 }
 
 async function handleSpecificWalletAction(
@@ -401,6 +405,8 @@ async function handleSpecificWalletAction(
     console.error('Error handling wallet action:', error)
     await editTelegramMessage(botToken, chatId, messageId, errorMessages.generic, backKeyboard('wallets'))
   }
+  
+  return NextResponse.json({ ok: true })
 }
 
 async function handleTransactionOperation(data: string, chatId: number, messageId: number, botToken: string, telegramUserId: number) {
@@ -460,6 +466,8 @@ async function handleTransactionOperation(data: string, chatId: number, messageI
     default:
       await editTelegramMessage(botToken, chatId, messageId, 'Feature coming soon!', backKeyboard('transactions'))
   }
+  
+  return NextResponse.json({ ok: true })
 }
 
 async function handleBudgetOperation(data: string, chatId: number, messageId: number, botToken: string, telegramUserId: number) {
@@ -490,6 +498,8 @@ async function handleBudgetOperation(data: string, chatId: number, messageId: nu
     default:
       await editTelegramMessage(botToken, chatId, messageId, 'Feature coming soon!', backKeyboard('budgets'))
   }
+  
+  return NextResponse.json({ ok: true })
 }
 
 async function handleCategoryOperation(data: string, chatId: number, messageId: number, botToken: string, telegramUserId: number) {
@@ -548,6 +558,8 @@ async function handleCategoryOperation(data: string, chatId: number, messageId: 
     default:
       await editTelegramMessage(botToken, chatId, messageId, 'Feature coming soon!', backKeyboard('categories'))
   }
+  
+  return NextResponse.json({ ok: true })
 }
 
 async function handleInvestmentOperation(data: string, chatId: number, messageId: number, botToken: string, telegramUserId: number) {
@@ -581,6 +593,8 @@ async function handleInvestmentOperation(data: string, chatId: number, messageId
     default:
       await editTelegramMessage(botToken, chatId, messageId, 'Feature coming soon!', backKeyboard('investments'))
   }
+  
+  return NextResponse.json({ ok: true })
 }
 
 async function handleSelection(data: string, chatId: number, messageId: number, botToken: string, telegramUserId: number) {
@@ -706,6 +720,8 @@ async function handleSelection(data: string, chatId: number, messageId: number, 
       await editTelegramMessage(botToken, chatId, messageId, errorMessages.generic, mainMenuKeyboard)
     }
   }
+  
+  return NextResponse.json({ ok: true })
 }
 
 async function handleConfirmation(data: string, chatId: number, messageId: number, botToken: string, telegramUserId: number) {
@@ -740,6 +756,8 @@ async function handleConfirmation(data: string, chatId: number, messageId: numbe
     // Handle other confirmations
     await editTelegramMessage(botToken, chatId, messageId, 'Feature coming soon!', mainMenuKeyboard)
   }
+  
+  return NextResponse.json({ ok: true })
 }
 
 async function handleConversationStep(session: any, message: any, botToken: string) {
