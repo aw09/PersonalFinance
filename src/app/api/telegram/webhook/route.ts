@@ -54,21 +54,34 @@ export async function POST(request: NextRequest) {
     await cleanupExpiredTelegramData()
 
     const body = await request.json()
-    console.log('Telegram webhook received:', JSON.stringify(body, null, 2))
+    console.log('=== TELEGRAM WEBHOOK RECEIVED ===')
+    console.log('Full body:', JSON.stringify(body, null, 2))
+    console.log('Has callback_query:', !!body.callback_query)
+    console.log('Has message:', !!body.message)
+    console.log('================================')
 
     // Handle callback queries (inline button presses)
     if (body.callback_query) {
-      return await handleCallbackQuery(body.callback_query, telegramBotToken)
+      console.log('Processing callback query...')
+      const result = await handleCallbackQuery(body.callback_query, telegramBotToken)
+      console.log('Callback query processed, returning result')
+      return result
     }
 
     // Handle regular messages
     if (body.message) {
-      return await handleMessage(body.message, telegramBotToken)
+      console.log('Processing regular message...')
+      const result = await handleMessage(body.message, telegramBotToken)
+      console.log('Message processed, returning result')
+      return result
     }
 
+    console.log('No callback_query or message found, returning generic success')
     return NextResponse.json({ ok: true })
   } catch (error) {
-    console.error('Telegram webhook error:', error)
+    console.error('=== TELEGRAM WEBHOOK ERROR ===')
+    console.error('Error details:', error)
+    console.error('===============================')
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -132,19 +145,33 @@ async function handleMessage(message: any, botToken: string) {
 }
 
 async function handleCallbackQuery(callbackQuery: any, botToken: string) {
+  console.log('=== PROCESSING CALLBACK QUERY ===')
+  console.log('Full callback query:', JSON.stringify(callbackQuery, null, 2))
+  
   const chatId = callbackQuery.message.chat.id
   const telegramUserId = callbackQuery.from.id
   const data = callbackQuery.callback_data
   const messageId = callbackQuery.message.message_id
 
+  console.log('Extracted data:')
+  console.log('- Chat ID:', chatId)
+  console.log('- User ID:', telegramUserId)
+  console.log('- Callback data:', data)
+  console.log('- Message ID:', messageId)
+
   // Answer the callback query to remove loading state
+  console.log('Answering callback query:', callbackQuery.id)
   await answerCallbackQuery(botToken, callbackQuery.id)
+  console.log('Callback query answered')
 
   // Check if user is linked for operations that require it
+  console.log('Checking user authentication...')
   const user = await getTelegramUser(telegramUserId)
   const requiresAuth = !data.startsWith('menu_') || data === 'menu_link'
+  console.log('User found:', !!user, 'Requires auth:', requiresAuth)
   
   if (!user && requiresAuth && data !== 'menu_link') {
+    console.log('User not linked, showing auth required message')
     await editTelegramMessage(botToken, chatId, messageId, 
       '🔗 Please link your account first to use this feature.', 
       mainMenuKeyboard)
@@ -152,47 +179,64 @@ async function handleCallbackQuery(callbackQuery: any, botToken: string) {
   }
 
   try {
+    console.log('Processing callback data:', data)
+    
     // Handle menu navigation
     if (data.startsWith('menu_')) {
+      console.log('Handling menu navigation')
       return await handleMenuNavigation(data, chatId, messageId, botToken, user)
     }
 
     // Handle CRUD operations
     if (data.startsWith('wallet_')) {
+      console.log('Handling wallet operation')
       return await handleWalletOperation(data, chatId, messageId, botToken, telegramUserId)
     }
     
     if (data.startsWith('transaction_')) {
+      console.log('Handling transaction operation')
       return await handleTransactionOperation(data, chatId, messageId, botToken, telegramUserId)
     }
     
     if (data.startsWith('budget_')) {
+      console.log('Handling budget operation')
       return await handleBudgetOperation(data, chatId, messageId, botToken, telegramUserId)
     }
     
     if (data.startsWith('category_')) {
+      console.log('Handling category operation')
       return await handleCategoryOperation(data, chatId, messageId, botToken, telegramUserId)
     }
     
     if (data.startsWith('investment_')) {
+      console.log('Handling investment operation')
       return await handleInvestmentOperation(data, chatId, messageId, botToken, telegramUserId)
     }
 
     // Handle confirmations and cancellations
     if (data.startsWith('confirm_') || data === 'cancel') {
+      console.log('Handling confirmation')
       return await handleConfirmation(data, chatId, messageId, botToken, telegramUserId)
     }
 
     // Handle selections (wallet, currency, etc.)
     if (data.startsWith('select_')) {
+      console.log('Handling selection')
       return await handleSelection(data, chatId, messageId, botToken, telegramUserId)
     }
 
+    console.log('No handler found for callback data:', data)
+    await editTelegramMessage(botToken, chatId, messageId, 'Unknown action', mainMenuKeyboard)
+
   } catch (error) {
+    console.error('=== ERROR IN CALLBACK HANDLER ===')
     console.error('Error handling callback query:', error)
+    console.error('===============================')
     await editTelegramMessage(botToken, chatId, messageId, errorMessages.generic, mainMenuKeyboard)
+    return NextResponse.json({ ok: true })
   }
 
+  console.log('Callback query processing completed')
   return NextResponse.json({ ok: true })
 }
 
@@ -946,6 +990,11 @@ async function sendTelegramMessage(
   keyboard?: InlineKeyboard
 ) {
   try {
+    console.log('Attempting to send Telegram message to chat:', chatId)
+    
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+    
     const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -954,14 +1003,20 @@ async function sendTelegramMessage(
         text: text,
         parse_mode: 'HTML',
         reply_markup: keyboard
-      })
+      }),
+      signal: controller.signal
     })
 
+    clearTimeout(timeoutId)
+    
     if (!response.ok) {
-      console.error('Failed to send Telegram message:', await response.text())
+      const errorText = await response.text()
+      console.error('Failed to send Telegram message:', response.status, errorText)
+    } else {
+      console.log('Successfully sent Telegram message')
     }
   } catch (error) {
-    console.error('Error sending Telegram message:', error)
+    console.error('Error sending Telegram message (this may be expected in sandboxed environments):', error)
   }
 }
 
@@ -973,6 +1028,11 @@ async function editTelegramMessage(
   keyboard?: InlineKeyboard
 ) {
   try {
+    console.log('Attempting to edit Telegram message:', messageId, 'in chat:', chatId)
+    
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+    
     const response = await fetch(`https://api.telegram.org/bot${botToken}/editMessageText`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -982,33 +1042,54 @@ async function editTelegramMessage(
         text: text,
         parse_mode: 'HTML',
         reply_markup: keyboard
-      })
+      }),
+      signal: controller.signal
     })
 
+    clearTimeout(timeoutId)
+
     if (!response.ok) {
-      console.error('Failed to edit Telegram message:', await response.text())
+      const errorText = await response.text()
+      console.error('Failed to edit Telegram message:', response.status, errorText)
+    } else {
+      console.log('Successfully edited Telegram message')
     }
   } catch (error) {
-    console.error('Error editing Telegram message:', error)
+    console.error('Error editing Telegram message (this may be expected in sandboxed environments):', error)
   }
 }
 
 async function answerCallbackQuery(botToken: string, callbackQueryId: string, text?: string) {
   try {
+    console.log('Attempting to answer callback query:', callbackQueryId)
+    
+    // In sandboxed environments, external API calls might be blocked
+    // We'll still attempt the call but won't let failures break the webhook
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
+    
     const response = await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         callback_query_id: callbackQueryId,
         text: text
-      })
+      }),
+      signal: controller.signal
     })
 
+    clearTimeout(timeoutId)
+    const responseText = await response.text()
+    console.log('Telegram answerCallbackQuery response:', response.status, responseText)
+
     if (!response.ok) {
-      console.error('Failed to answer callback query:', await response.text())
+      console.error('Failed to answer callback query:', response.status, responseText)
+    } else {
+      console.log('Successfully answered callback query')
     }
   } catch (error) {
-    console.error('Error answering callback query:', error)
+    console.error('Error answering callback query (this may be expected in sandboxed environments):', error)
+    // Don't throw the error - we still want the webhook to return success
   }
 }
 
