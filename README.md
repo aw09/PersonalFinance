@@ -63,10 +63,12 @@ A comprehensive fullstack personal finance management application built with Nex
    cp .env.example .env.local
    ```
    
-   Fill in your Supabase credentials:
+   Fill in your Supabase credentials and optional services:
    ```
    NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+   SUPABASE_SERVICE_ROLE_KEY=your_service_role_key  # Required for Telegram bot
+   TELEGRAM_BOT_TOKEN=your_telegram_bot_token      # Optional: for Telegram integration
    ```
 
 4. Set up the database:
@@ -202,9 +204,17 @@ All tables implement Row Level Security (RLS) for data protection.
 |----------|-------------|----------|
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL | Yes |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous key | Yes |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | Optional |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot token | Optional |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (required for Telegram bot) | Yes for Telegram |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token from @BotFather | Yes for Telegram |
 | `OPENAI_API_KEY` | OpenAI API key for LLM features | Optional |
+
+### Telegram Bot Setup
+To enable Telegram integration:
+1. Create a bot via @BotFather on Telegram
+2. Get your bot token and add it to `TELEGRAM_BOT_TOKEN`
+3. Get your Supabase service role key from your project settings
+4. Run the database migrations to create the required tables
+5. Use the "Link Telegram" button in your dashboard to connect your account
 
 ## Deployment
 

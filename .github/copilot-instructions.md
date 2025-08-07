@@ -3,7 +3,7 @@
 ## Architecture Overview
 - **Frontend**: Next.js 14 (App Router, TypeScript, Tailwind CSS) in `src/app` and `src/components`.
 - **Backend**: Next.js API Routes in `src/app/api/*`.
-- **Database**: Supabase Postgres, managed via SQL migrations in `database/`.
+- **Database**: Supabase Postgres, managed via SQL migrations in `supabase/migrations/`.
 - **Auth**: Supabase JWT, enforced via Row Level Security (RLS) on all tables.
 
 ## Key Patterns & Conventions
@@ -24,7 +24,9 @@
   - Copy env: `cp .env.example .env.local`
   - Start dev server: `npm run dev`
 - **Database Setup**:
-  - Run migrations: execute SQL in `database/schema.sql` and `database/default_categories.sql` on Supabase.
+  - Run migrations: Use Supabase CLI commands for migrations
+  - Local: `npx supabase migration up` or `npx supabase db reset`
+  - Production: Apply migrations through Supabase dashboard or CI/CD pipeline
 - **Environment Variables**:
   - All secrets and keys are managed via `.env.local` (local) and Railway/production env config.
 - **Debugging Auth/RLS**:
@@ -40,7 +42,7 @@
 - **Authenticated API Route**:
   See `src/app/api/budgets/route.ts` for the canonical pattern.
 - **Migration Scripts**:
-  See `database/schema.sql` and `database/default_categories.sql`.
+  See `supabase/migrations/` directory for all database schema changes.
 - **RLS Policy Reference**:
   See migration SQL and README for RLS details.
 

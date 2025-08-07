@@ -7,6 +7,10 @@ export interface Database {
           email: string
           full_name: string | null
           avatar_url: string | null
+          telegram_user_id: number | null
+          telegram_chat_id: number | null
+          telegram_username: string | null
+          telegram_linked_at: string | null
           created_at: string
           updated_at: string
         }
@@ -15,6 +19,10 @@ export interface Database {
           email: string
           full_name?: string | null
           avatar_url?: string | null
+          telegram_user_id?: number | null
+          telegram_chat_id?: number | null
+          telegram_username?: string | null
+          telegram_linked_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -23,6 +31,10 @@ export interface Database {
           email?: string
           full_name?: string | null
           avatar_url?: string | null
+          telegram_user_id?: number | null
+          telegram_chat_id?: number | null
+          telegram_username?: string | null
+          telegram_linked_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -126,12 +138,76 @@ export interface Database {
           updated_at?: string
         }
       }
+      telegram_sessions: {
+        Row: {
+          id: string
+          telegram_user_id: number
+          telegram_chat_id: number
+          session_data: any
+          current_step: string | null
+          expires_at: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          telegram_user_id: number
+          telegram_chat_id: number
+          session_data?: any
+          current_step?: string | null
+          expires_at?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          telegram_user_id?: number
+          telegram_chat_id?: number
+          session_data?: any
+          current_step?: string | null
+          expires_at?: string
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      telegram_link_tokens: {
+        Row: {
+          id: string
+          user_id: string
+          token: string
+          telegram_user_id: number | null
+          expires_at: string
+          used_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          token: string
+          telegram_user_id?: number | null
+          expires_at?: string
+          used_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          token?: string
+          telegram_user_id?: number | null
+          expires_at?: string
+          used_at?: string | null
+          created_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      cleanup_expired_telegram_data: {
+        Args: {}
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
