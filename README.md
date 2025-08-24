@@ -67,6 +67,7 @@ A comprehensive fullstack personal finance management application built with Nex
    ```
    NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+   NEXT_PUBLIC_SITE_URL=http://localhost:3000
    ```
 
 4. Set up the database:
@@ -124,6 +125,12 @@ npm run db types
 ```
 
 For detailed migration documentation, see [docs/MIGRATIONS.md](docs/MIGRATIONS.md).
+
+## Authentication
+
+This application uses Supabase Auth for user authentication. For production deployments, ensure proper Site URL configuration to prevent confirmation emails from redirecting to localhost.
+
+For detailed authentication setup and troubleshooting, see [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md).
 
 ## Database Schema
 

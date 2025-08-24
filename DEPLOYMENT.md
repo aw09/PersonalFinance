@@ -11,6 +11,11 @@
 1. Create a new project at [supabase.com](https://supabase.com)
 2. Go to the SQL Editor and run the `database/schema.sql` script
 3. Get your project URL and anon key from Settings > API
+4. **Important**: Configure the Site URL for email links:
+   - Go to Authentication > URL Configuration in your Supabase dashboard
+   - Set "Site URL" to your production domain (e.g., `https://your-app.railway.app`)
+   - Add your production domain to "Redirect URLs" list
+   - This ensures confirmation emails link to your production app, not localhost
 
 ### Step 2: Deploy to Railway
 1. Visit [railway.app](https://railway.app) and sign in with GitHub
@@ -20,6 +25,7 @@
    ```
    NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+   NEXT_PUBLIC_SITE_URL=https://your-app.railway.app
    TELEGRAM_BOT_TOKEN=your_telegram_bot_token (optional)
    OPENAI_API_KEY=your_openai_api_key (optional)
    ```
@@ -58,11 +64,27 @@
 |----------|----------|-------------|
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Your Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Your Supabase anonymous key |
+| `NEXT_PUBLIC_SITE_URL` | Yes | Your app's URL (for auth redirects) |
 | `SUPABASE_SERVICE_ROLE_KEY` | No | For admin operations |
 | `TELEGRAM_BOT_TOKEN` | No | For Telegram bot integration |
 | `OPENAI_API_KEY` | No | For AI-powered features |
 
 ## Post-Deployment Setup
+
+### Critical: Configure Supabase Site URL
+
+**This step is essential to fix confirmation email links redirecting to localhost:**
+
+1. Go to your Supabase project dashboard
+2. Navigate to **Authentication > URL Configuration**
+3. Update the following settings:
+   - **Site URL**: Set to your production domain (e.g., `https://your-app.railway.app`)
+   - **Redirect URLs**: Add your production domain (e.g., `https://your-app.railway.app/**`)
+4. Save the changes
+
+Without this configuration, confirmation emails will contain localhost links that won't work in production.
+
+### Application Setup
 
 1. Visit your deployed app
 2. Create an account using the authentication system
