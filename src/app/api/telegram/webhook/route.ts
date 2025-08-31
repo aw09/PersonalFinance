@@ -150,7 +150,9 @@ async function handleCallbackQuery(callbackQuery: any, botToken: string) {
   
   const chatId = callbackQuery.message.chat.id
   const telegramUserId = callbackQuery.from.id
-  const data = callbackQuery.callback_data
+  // Telegram callback_query payload uses `data` (not `callback_data`).
+  // Support both keys to be resilient to different payload shapes and tests.
+  const data = callbackQuery.data ?? callbackQuery.callback_data
   const messageId = callbackQuery.message.message_id
 
   console.log('Extracted data:')
@@ -167,7 +169,8 @@ async function handleCallbackQuery(callbackQuery: any, botToken: string) {
   // Check if user is linked for operations that require it
   console.log('Checking user authentication...')
   const user = await getTelegramUser(telegramUserId)
-  const requiresAuth = !data.startsWith('menu_') || data === 'menu_link'
+  // Guard against undefined `data` when determining if the action requires auth
+  const requiresAuth = !(data?.startsWith('menu_')) || data === 'menu_link'
   console.log('User found:', !!user, 'Requires auth:', requiresAuth)
   
   if (!user && requiresAuth && data !== 'menu_link') {
