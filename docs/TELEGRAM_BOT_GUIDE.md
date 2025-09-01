@@ -83,7 +83,7 @@ https://your-domain.com/api/telegram/webhook
 2. User clicks "Create Wallet"
 3. User enters wallet name
 4. User enters description (optional)
-5. User selects currency (USD, EUR, GBP, JPY)
+5. User selects currency (USD, EUR, GBP, JPY, IDR)
 6. Wallet is created and ready to use
 
 ### Adding a Transaction

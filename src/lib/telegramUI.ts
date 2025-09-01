@@ -268,7 +268,17 @@ export const successMessages = {
 
 // Format currency
 export function formatCurrency(amount: number, currency: string = 'USD'): string {
-  return new Intl.NumberFormat('en-US', {
+  const localeMap: Record<string, string> = {
+    IDR: 'id-ID',
+    JPY: 'ja-JP',
+    GBP: 'en-GB',
+    EUR: 'de-DE',
+    USD: 'en-US'
+  };
+
+  const locale = localeMap[currency] || 'en-US';
+
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: currency
   }).format(amount);

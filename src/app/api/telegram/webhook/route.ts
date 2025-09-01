@@ -830,8 +830,7 @@ async function handleConversationStep(session: any, message: any, botToken: stri
         botToken, 
         chatId, 
         `💼 <b>Create Wallet</b>\n\nName: ${text}\n\nEnter a description (optional, send "skip" to skip):`, 
-        cancelKeyboard
-      )
+        cancelKeyboard)
       break
 
     case 'wallet_create_description':
@@ -850,6 +849,9 @@ async function handleConversationStep(session: any, message: any, botToken: stri
           [
             { text: '💷 GBP', callback_data: 'select_currency_GBP' },
             { text: '💴 JPY', callback_data: 'select_currency_JPY' }
+          ],
+          [
+            { text: '🇮🇩 IDR', callback_data: 'select_currency_IDR' }
           ],
           [
             { text: '❌ Cancel', callback_data: 'cancel' }
@@ -878,8 +880,7 @@ async function handleConversationStep(session: any, message: any, botToken: stri
         botToken, 
         chatId, 
         `💰 <b>Add ${sessionData.type === 'income' ? 'Income' : 'Expense'}</b>\n\nAmount: ${formatCurrency(amount)}\n\nEnter a description:`, 
-        cancelKeyboard
-      )
+        cancelKeyboard)
       break
 
     case 'transaction_create_description':
@@ -892,7 +893,7 @@ async function handleConversationStep(session: any, message: any, botToken: stri
       
       // Get categories for this transaction type
       const categories = await getTelegramUserCategories(telegramUserId)
-      const relevantCategories = categories.filter(c => c.type === sessionData.type)
+      const relevantCategories = categories.filter((c: any) => c.type === sessionData.type)
       
       if (relevantCategories.length === 0) {
         // Create transaction without category
@@ -931,7 +932,7 @@ async function handleConversationStep(session: any, message: any, botToken: stri
         
         const categoryKeyboard: any = { inline_keyboard: [] }
         
-        relevantCategories.forEach((category) => {
+        relevantCategories.forEach((category: any) => {
           categoryKeyboard.inline_keyboard.push([
             { text: `🏷️ ${category.name}`, callback_data: `select_category_${category.id}` }
           ])
