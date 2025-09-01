@@ -37,7 +37,8 @@ import {
   formatCurrency,
   formatDate,
   createPaginationKeyboard,
-  InlineKeyboard
+  InlineKeyboard,
+  getMainMenuKeyboard
 } from '@/lib/telegramUI'
 
 // Telegram Bot webhook handler
@@ -98,9 +99,9 @@ async function handleMessage(message: any, botToken: string) {
     const user = await getTelegramUser(telegramUserId)
     
     if (!user) {
-      await sendTelegramMessage(botToken, chatId, accountNotLinkedMessage, mainMenuKeyboard)
+      await sendTelegramMessage(botToken, chatId, accountNotLinkedMessage, getMainMenuKeyboard(false))
     } else {
-      await sendTelegramMessage(botToken, chatId, welcomeMessage, mainMenuKeyboard)
+      await sendTelegramMessage(botToken, chatId, welcomeMessage, getMainMenuKeyboard(true))
     }
     return NextResponse.json({ ok: true })
   }
@@ -126,7 +127,8 @@ async function handleMessage(message: any, botToken: string) {
   if (text && text.length === 6 && /^[A-Z0-9]+$/.test(text)) {
     const result = await linkTelegramAccount(text, telegramUserId, chatId, telegramUsername)
     if (result.success) {
-      await sendTelegramMessage(botToken, chatId, successMessages.linked + '\n\nWelcome to Personal Finance Bot! 🎉', mainMenuKeyboard)
+      // After successful linking show linked main menu
+      await sendTelegramMessage(botToken, chatId, successMessages.linked + '\n\nWelcome to Personal Finance Bot! 🎉', getMainMenuKeyboard(true))
     } else {
       await sendTelegramMessage(botToken, chatId, `❌ ${result.error}\n\nTry again or use /start to return to main menu.`)
     }
@@ -248,7 +250,8 @@ async function handleMenuNavigation(data: string, chatId: number, messageId: num
 
   switch (menuType) {
     case 'main':
-      await editTelegramMessage(botToken, chatId, messageId, welcomeMessage, mainMenuKeyboard)
+      // Show linked-aware main menu depending on user
+      await editTelegramMessage(botToken, chatId, messageId, welcomeMessage, getMainMenuKeyboard(!!user))
       break
     
     case 'wallets':

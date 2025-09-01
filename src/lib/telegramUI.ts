@@ -10,8 +10,8 @@ export interface InlineKeyboard {
   inline_keyboard: InlineKeyboardButton[][];
 }
 
-// Main menu keyboard
-export const mainMenuKeyboard: InlineKeyboard = {
+// Main menu keyboard (default: not linked)
+export const mainMenuKeyboard: InlineKeyboard = getMainMenuKeyboard ? getMainMenuKeyboard(false) : {
   inline_keyboard: [
     [
       { text: '💼 Wallets', callback_data: 'menu_wallets' },
@@ -30,6 +30,32 @@ export const mainMenuKeyboard: InlineKeyboard = {
     ]
   ]
 };
+
+// Return a main menu keyboard adjusted for whether the user is linked.
+// If linked=true, the Link Account button will be replaced with a non-action '✅ Linked' label.
+export function getMainMenuKeyboard(linked: boolean): InlineKeyboard {
+  const rows: InlineKeyboardButton[][] = [
+    [
+      { text: '💼 Wallets', callback_data: 'menu_wallets' },
+      { text: '💰 Transactions', callback_data: 'menu_transactions' }
+    ],
+    [
+      { text: '📊 Budgets', callback_data: 'menu_budgets' },
+      { text: '🏷️ Categories', callback_data: 'menu_categories' }
+    ],
+    [
+      { text: '📈 Investments', callback_data: 'menu_investments' },
+      linked
+        ? { text: '✅ Linked', callback_data: 'noop' }
+        : { text: '🔗 Link Account', callback_data: 'menu_link' }
+    ],
+    [
+      { text: 'ℹ️ Help', callback_data: 'menu_help' }
+    ]
+  ];
+
+  return { inline_keyboard: rows };
+}
 
 // Wallet menu keyboard
 export const walletMenuKeyboard: InlineKeyboard = {
