@@ -40,6 +40,7 @@ import {
   InlineKeyboard,
   getMainMenuKeyboard
 } from '@/lib/telegramUI'
+import { generateGeminiReply } from '@/lib/gemini'
 
 // Telegram Bot webhook handler
 export async function POST(request: NextRequest) {
@@ -136,12 +137,29 @@ async function handleMessage(message: any, botToken: string) {
   }
 
   // Default response for unrecognized messages
-  await sendTelegramMessage(
-    botToken, 
-    chatId, 
-    '🤔 I didn\'t understand that. Use /start to see the main menu or /help for assistance.',
-    mainMenuKeyboard
-  )
+  // If GEMINI_API_KEY is present, forward unknown messages to the LLM for a helpful reply.
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const prompt = `You are a helpful assistant for a personal finance Telegram bot. The user sent: "${text || ''}"\nRespond concisely with next steps or ask clarifying questions. Keep answers short.`
+      const reply = await generateGeminiReply(prompt)
+      await sendTelegramMessage(botToken, chatId, reply, mainMenuKeyboard)
+    } catch (err) {
+      console.error('LLM fallback failed, sending generic reply:', err)
+      await sendTelegramMessage(
+        botToken,
+        chatId,
+        "🤔 I didn't understand that. Use /start to see the main menu or /help for assistance.",
+        mainMenuKeyboard
+      )
+    }
+  } else {
+    await sendTelegramMessage(
+      botToken, 
+      chatId, 
+      '🤔 I didn\'t understand that. Use /start to see the main menu or /help for assistance.',
+      mainMenuKeyboard
+    )
+  }
 
   return NextResponse.json({ ok: true })
 }
