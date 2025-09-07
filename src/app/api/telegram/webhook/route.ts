@@ -41,6 +41,7 @@ import {
   getMainMenuKeyboard
 } from '@/lib/telegramUI'
 import { generateGeminiReply } from '@/lib/gemini'
+import { handleGeminiTelegramQuery } from '@/lib/geminiAgent'
 
 // Telegram Bot webhook handler
 export async function POST(request: NextRequest) {
@@ -140,11 +141,10 @@ async function handleMessage(message: any, botToken: string) {
   // If GEMINI_API_KEY is present, forward unknown messages to the LLM for a helpful reply.
   if (process.env.GEMINI_API_KEY) {
     try {
-      const prompt = `You are a helpful assistant for a personal finance Telegram bot. The user sent: "${text || ''}"\nRespond concisely with next steps or ask clarifying questions. Keep answers short.`
-      const reply = await generateGeminiReply(prompt)
+      const reply = await handleGeminiTelegramQuery(telegramUserId, chatId, text || '')
       await sendTelegramMessage(botToken, chatId, reply, mainMenuKeyboard)
     } catch (err) {
-      console.error('LLM fallback failed, sending generic reply:', err)
+      console.error('LLM agent failed, sending generic reply:', err)
       await sendTelegramMessage(
         botToken,
         chatId,
