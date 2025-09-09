@@ -120,13 +120,15 @@ export default function CreateBudgetModal({ isOpen, onClose, onBudgetCreated }: 
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Create Budget</h2>
+    <div className="modal-overlay flex items-center justify-center z-50">
+      <div className="modal-content w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="card-header">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Create Budget</h2>
+        </div>
         
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="card-body space-y-4">
           <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="name" className="label">
               Budget Name *
             </label>
             <input
@@ -134,14 +136,14 @@ export default function CreateBudgetModal({ isOpen, onClose, onBudgetCreated }: 
               id="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="input"
               placeholder="e.g., Monthly Groceries, Entertainment"
               required
             />
           </div>
 
           <div>
-            <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="amount" className="label">
               Budget Amount *
             </label>
             <input
@@ -149,7 +151,7 @@ export default function CreateBudgetModal({ isOpen, onClose, onBudgetCreated }: 
               id="amount"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="input"
               placeholder="0.00"
               step="0.01"
               min="0"
@@ -158,14 +160,14 @@ export default function CreateBudgetModal({ isOpen, onClose, onBudgetCreated }: 
           </div>
 
           <div>
-            <label htmlFor="period" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="period" className="label">
               Budget Period *
             </label>
             <select
               id="period"
               value={period}
               onChange={(e) => setPeriod(e.target.value as 'weekly' | 'monthly' | 'yearly')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="input"
             >
               <option value="weekly">Weekly</option>
               <option value="monthly">Monthly</option>
@@ -174,14 +176,14 @@ export default function CreateBudgetModal({ isOpen, onClose, onBudgetCreated }: 
           </div>
 
           <div>
-            <label htmlFor="wallet" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="wallet" className="label">
               Wallet *
             </label>
             <select
               id="wallet"
               value={walletId}
               onChange={(e) => setWalletId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="input"
               required
             >
               <option value="">Select a wallet</option>
@@ -194,14 +196,14 @@ export default function CreateBudgetModal({ isOpen, onClose, onBudgetCreated }: 
           </div>
 
           <div>
-            <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="category" className="label">
               Category (Optional)
             </label>
             <select
               id="category"
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="input"
             >
               <option value="">All Expenses</option>
               {categories.map((category) => (
@@ -213,7 +215,7 @@ export default function CreateBudgetModal({ isOpen, onClose, onBudgetCreated }: 
           </div>
 
           <div>
-            <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="startDate" className="label">
               Start Date *
             </label>
             <input
@@ -221,13 +223,13 @@ export default function CreateBudgetModal({ isOpen, onClose, onBudgetCreated }: 
               id="startDate"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="input"
               required
             />
           </div>
 
           <div>
-            <label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="endDate" className="label">
               End Date (Optional)
             </label>
             <input
@@ -235,10 +237,10 @@ export default function CreateBudgetModal({ isOpen, onClose, onBudgetCreated }: 
               id="endDate"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="input"
               min={startDate}
             />
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               Leave empty for ongoing budget
             </p>
           </div>
@@ -247,14 +249,14 @@ export default function CreateBudgetModal({ isOpen, onClose, onBudgetCreated }: 
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2 px-4 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition"
+              className="flex-1 btn-secondary"
               disabled={loading}
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 py-2 px-4 bg-green-600 text-white rounded-md hover:bg-green-700 transition disabled:opacity-50"
+              className="flex-1 btn-success"
               disabled={loading || !name || !amount || !walletId}
             >
               {loading ? 'Creating...' : 'Create Budget'}

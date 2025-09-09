@@ -64,13 +64,15 @@ export default function CreateWalletModal({ isOpen, onClose, onWalletCreated }: 
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Create New Wallet</h2>
+    <div className="modal-overlay flex items-center justify-center z-50">
+      <div className="modal-content w-full max-w-md mx-4">
+        <div className="card-header">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Create New Wallet</h2>
+        </div>
         
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="card-body space-y-4">
           <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="name" className="label">
               Wallet Name *
             </label>
             <input
@@ -78,35 +80,35 @@ export default function CreateWalletModal({ isOpen, onClose, onWalletCreated }: 
               id="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="input"
               placeholder="e.g., Main Checking, Savings, Cash"
               required
             />
           </div>
 
           <div>
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="description" className="label">
               Description
             </label>
             <textarea
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="input"
               placeholder="Optional description"
               rows={3}
             />
           </div>
 
           <div>
-            <label htmlFor="currency" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="currency" className="label">
               Currency
             </label>
             <select
               id="currency"
               value={currency}
               onChange={(e) => setCurrency(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="input"
             >
               <option value="USD">USD - US Dollar</option>
               <option value="EUR">EUR - Euro</option>
@@ -122,14 +124,14 @@ export default function CreateWalletModal({ isOpen, onClose, onWalletCreated }: 
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2 px-4 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition"
+              className="flex-1 btn-secondary"
               disabled={loading}
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition disabled:opacity-50"
+              className="flex-1 btn-primary"
               disabled={loading || !name.trim()}
             >
               {loading ? 'Creating...' : 'Create Wallet'}

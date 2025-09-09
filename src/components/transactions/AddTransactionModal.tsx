@@ -116,13 +116,15 @@ export default function AddTransactionModal({ isOpen, onClose, onTransactionAdde
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Add Transaction</h2>
+    <div className="modal-overlay flex items-center justify-center z-50">
+      <div className="modal-content w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="card-header">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Add Transaction</h2>
+        </div>
         
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="card-body space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="label">
               Type *
             </label>
             <div className="flex space-x-4">
@@ -135,9 +137,9 @@ export default function AddTransactionModal({ isOpen, onClose, onTransactionAdde
                     setType(e.target.value as 'expense')
                     setCategoryId('')
                   }}
-                  className="mr-2"
+                  className="mr-2 text-danger-600 focus:ring-danger-500"
                 />
-                <span className="text-red-600">Expense</span>
+                <span className="text-danger-600 dark:text-danger-400">Expense</span>
               </label>
               <label className="flex items-center">
                 <input
@@ -148,15 +150,15 @@ export default function AddTransactionModal({ isOpen, onClose, onTransactionAdde
                     setType(e.target.value as 'income')
                     setCategoryId('')
                   }}
-                  className="mr-2"
+                  className="mr-2 text-success-600 focus:ring-success-500"
                 />
-                <span className="text-green-600">Income</span>
+                <span className="text-success-600 dark:text-success-400">Income</span>
               </label>
             </div>
           </div>
 
           <div>
-            <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="amount" className="label">
               Amount *
             </label>
             <input
@@ -164,7 +166,7 @@ export default function AddTransactionModal({ isOpen, onClose, onTransactionAdde
               id="amount"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="input"
               placeholder="0.00"
               step="0.01"
               min="0"
@@ -173,7 +175,7 @@ export default function AddTransactionModal({ isOpen, onClose, onTransactionAdde
           </div>
 
           <div>
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="description" className="label">
               Description *
             </label>
             <input
@@ -181,21 +183,21 @@ export default function AddTransactionModal({ isOpen, onClose, onTransactionAdde
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="input"
               placeholder="Enter transaction description"
               required
             />
           </div>
 
           <div>
-            <label htmlFor="wallet" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="wallet" className="label">
               Wallet *
             </label>
             <select
               id="wallet"
               value={walletId}
               onChange={(e) => setWalletId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="input"
               required
             >
               <option value="">Select a wallet</option>
@@ -208,14 +210,14 @@ export default function AddTransactionModal({ isOpen, onClose, onTransactionAdde
           </div>
 
           <div>
-            <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="category" className="label">
               Category
             </label>
             <select
               id="category"
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="input"
             >
               <option value="">Select a category</option>
               {filteredCategories.map((category) => (
@@ -227,7 +229,7 @@ export default function AddTransactionModal({ isOpen, onClose, onTransactionAdde
           </div>
 
           <div>
-            <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="date" className="label">
               Date *
             </label>
             <input
@@ -235,7 +237,7 @@ export default function AddTransactionModal({ isOpen, onClose, onTransactionAdde
               id="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="input"
               required
             />
           </div>
@@ -244,14 +246,14 @@ export default function AddTransactionModal({ isOpen, onClose, onTransactionAdde
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2 px-4 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition"
+              className="flex-1 btn-secondary"
               disabled={loading}
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition disabled:opacity-50"
+              className="flex-1 btn-primary"
               disabled={loading || !amount || !description || !walletId}
             >
               {loading ? 'Adding...' : 'Add Transaction'}
