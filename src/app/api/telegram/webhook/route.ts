@@ -142,7 +142,9 @@ async function handleMessage(message: any, botToken: string) {
   if (process.env.GEMINI_API_KEY) {
     try {
       const reply = await handleGeminiTelegramQuery(telegramUserId, chatId, text || '')
-      await sendTelegramMessage(botToken, chatId, reply, mainMenuKeyboard)
+      // Don't always show main menu - let the LLM decide based on response type
+      const shouldShowMenu = reply.includes('Use /menu') || reply.includes('couldn\'t map your request')
+      await sendTelegramMessage(botToken, chatId, reply, shouldShowMenu ? mainMenuKeyboard : undefined)
     } catch (err) {
       console.error('LLM agent failed, sending generic reply:', err)
       await sendTelegramMessage(
