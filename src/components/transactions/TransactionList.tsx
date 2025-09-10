@@ -84,13 +84,15 @@ export default function TransactionList({ limit = 10, walletId, onAddTransaction
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="animate-pulse">
-          <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
-          <div className="space-y-3">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="h-16 bg-gray-200 rounded"></div>
-            ))}
+      <div className="card">
+        <div className="card-body">
+          <div className="animate-pulse">
+            <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4"></div>
+            <div className="space-y-3">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-16 bg-gray-200 dark:bg-gray-700 rounded"></div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -98,21 +100,22 @@ export default function TransactionList({ limit = 10, walletId, onAddTransaction
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold text-gray-700">
-          {walletId ? 'Wallet Transactions' : 'Recent Transactions'}
-        </h2>
-        <div className="flex space-x-2">
-          {onAddTransaction && (
-            <button
-              onClick={onAddTransaction}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition text-sm"
+    <div className="card">
+      <div className="card-body">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold text-gray-700 dark:text-gray-300">
+            {walletId ? 'Wallet Transactions' : 'Recent Transactions'}
+          </h2>
+          <div className="flex space-x-2">
+            {onAddTransaction && (
+              <button
+                onClick={onAddTransaction}
+                className="btn-primary btn-sm"
             >
               Add Transaction
             </button>
           )}
-          <button className="text-blue-600 hover:text-blue-800 text-sm font-medium">
+          <button className="text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300 text-sm font-medium">
             View All
           </button>
         </div>
@@ -120,19 +123,19 @@ export default function TransactionList({ limit = 10, walletId, onAddTransaction
 
       {transactions.length === 0 ? (
         <div className="text-center py-8">
-          <div className="text-gray-500 mb-4">
+          <div className="text-gray-500 dark:text-gray-400 mb-4">
             <svg className="w-12 h-12 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
             No transactions yet
           </div>
-          <p className="text-gray-600 mb-4">
+          <p className="text-gray-600 dark:text-gray-400 mb-4">
             Start by adding your first transaction!
           </p>
           {onAddTransaction && (
             <button
               onClick={onAddTransaction}
-              className="bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 transition"
+              className="btn-primary"
             >
               Add Your First Transaction
             </button>
@@ -141,7 +144,7 @@ export default function TransactionList({ limit = 10, walletId, onAddTransaction
       ) : (
         <div className="space-y-3">
           {transactions.map((transaction) => (
-            <div key={transaction.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
+            <div key={transaction.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition bg-gray-50 dark:bg-gray-800/50">
               <div className="flex justify-between items-start">
                 <div className="flex-1">
                   <div className="flex items-center space-x-3">
@@ -151,11 +154,11 @@ export default function TransactionList({ limit = 10, walletId, onAddTransaction
                       )}
                     </div>
                     <div>
-                      <h4 className="font-medium text-gray-900">{transaction.description}</h4>
-                      <div className="flex items-center space-x-2 text-sm text-gray-600">
+                      <h4 className="font-medium text-gray-900 dark:text-gray-100">{transaction.description}</h4>
+                      <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
                         {transaction.categories && (
                           <span 
-                            className="px-2 py-1 rounded text-white text-xs font-medium"
+                            className="px-2 py-1 rounded text-gray-50 dark:text-gray-100 text-xs font-medium"
                             style={{ backgroundColor: transaction.categories.color }}
                           >
                             {transaction.categories.name}
@@ -172,16 +175,16 @@ export default function TransactionList({ limit = 10, walletId, onAddTransaction
                   <div 
                     className={`text-lg font-bold ${
                       transaction.type === 'income' 
-                        ? 'text-green-600' 
+                        ? 'text-success-600 dark:text-success-400' 
                         : transaction.type === 'expense'
-                        ? 'text-red-600'
-                        : 'text-blue-600'
+                        ? 'text-danger-600 dark:text-danger-400'
+                        : 'text-primary-600 dark:text-primary-400'
                     }`}
                   >
                     {transaction.type === 'expense' ? '' : '+'}
                     {formatCurrency(Math.abs(transaction.amount), transaction.wallets.currency)}
                   </div>
-                  <div className="text-sm text-gray-500 capitalize">
+                  <div className="text-sm text-gray-500 dark:text-gray-400 capitalize">
                     {transaction.type}
                   </div>
                 </div>
@@ -190,6 +193,7 @@ export default function TransactionList({ limit = 10, walletId, onAddTransaction
           ))}
         </div>
       )}
+      </div>
     </div>
   )
 }

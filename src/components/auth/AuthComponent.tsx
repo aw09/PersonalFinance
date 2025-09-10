@@ -3,37 +3,61 @@
 import { Auth } from '@supabase/auth-ui-react'
 import { ThemeSupa } from '@supabase/auth-ui-shared'
 import { supabase } from '@/lib/supabase'
+import { useTheme } from '@/contexts/ThemeContext'
 
 export default function AuthComponent() {
+  const { theme } = useTheme()
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Personal Finance
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Sign in to manage your finances
-          </p>
-        </div>
-        <div className="bg-white py-8 px-6 shadow rounded-lg">
-          <Auth
-            supabaseClient={supabase}
-            appearance={{ 
-              theme: ThemeSupa,
-              variables: {
-                default: {
-                  colors: {
-                    brand: '#3B82F6',
-                    brandAccent: '#2563EB',
-                  },
+    <div className="card max-w-md mx-auto">
+      <div className="card-body">
+        <Auth
+          supabaseClient={supabase}
+          appearance={{ 
+            theme: ThemeSupa,
+            variables: {
+              default: {
+                colors: {
+                  brand: theme === 'dark' ? '#60a5fa' : '#3b82f6',
+                  brandAccent: theme === 'dark' ? '#3b82f6' : '#2563eb',
+                  inputBackground: 'transparent',
+                  inputBorder: theme === 'dark' ? 'rgb(55, 65, 81)' : 'rgb(209, 213, 219)',
+                  inputBorderFocus: theme === 'dark' ? '#60a5fa' : '#3b82f6',
+                  inputBorderHover: theme === 'dark' ? 'rgb(75, 85, 99)' : 'rgb(156, 163, 175)',
+                  inputText: theme === 'dark' ? 'rgb(243, 244, 246)' : 'rgb(17, 24, 39)',
+                  inputLabelText: theme === 'dark' ? 'rgb(209, 213, 219)' : 'rgb(55, 65, 81)',
+                  inputPlaceholder: theme === 'dark' ? 'rgb(156, 163, 175)' : 'rgb(156, 163, 175)',
+                  messageText: theme === 'dark' ? 'rgb(243, 244, 246)' : 'rgb(17, 24, 39)',
+                  messageTextDanger: theme === 'dark' ? '#f87171' : '#ef4444',
+                  anchorTextColor: theme === 'dark' ? '#60a5fa' : '#3b82f6',
+                  anchorTextHoverColor: theme === 'dark' ? '#3b82f6' : '#2563eb',
+                },
+                space: {
+                  inputPadding: '12px 16px',
+                  buttonPadding: '12px 24px',
+                },
+                borderWidths: {
+                  buttonBorderWidth: '1px',
+                  inputBorderWidth: '1px',
+                },
+                radii: {
+                  borderRadiusButton: '12px',
+                  buttonBorderRadius: '12px',
+                  inputBorderRadius: '12px',
                 },
               },
-            }}
-            providers={[]}
-            redirectTo={`${window.location.origin}/auth/callback`}
-          />
-        </div>
+            },
+            className: {
+              anchor: 'transition-colors duration-200',
+              button: 'transition-all duration-200 font-medium shadow-soft hover:shadow-soft-lg',
+              input: 'transition-all duration-200',
+              label: 'font-medium',
+              message: 'text-sm',
+            }
+          }}
+          providers={[]}
+          redirectTo={`${window.location.origin}/auth/callback`}
+        />
       </div>
     </div>
   )
