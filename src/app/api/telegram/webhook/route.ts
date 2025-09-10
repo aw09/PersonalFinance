@@ -1043,7 +1043,22 @@ async function sendTelegramMessage(
       console.log('Successfully sent Telegram message')
     }
   } catch (error) {
-    console.error('Error sending Telegram message (this may be expected in sandboxed environments):', error)
+    // Provide more detailed error logging while acknowledging sandboxed environment limitations
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        console.error('Telegram message send timeout (expected in sandboxed environments)')
+      } else if (error.message.includes('ETIMEDOUT') || error.message.includes('fetch failed')) {
+        console.error('Telegram API connection timeout (expected in sandboxed environments):', error.message)
+      } else {
+        console.error('Error sending Telegram message:', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        })
+      }
+    } else {
+      console.error('Unknown error sending Telegram message:', error)
+    }
   }
 }
 
@@ -1082,7 +1097,22 @@ async function editTelegramMessage(
       console.log('Successfully edited Telegram message')
     }
   } catch (error) {
-    console.error('Error editing Telegram message (this may be expected in sandboxed environments):', error)
+    // Provide more detailed error logging while acknowledging sandboxed environment limitations
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        console.error('Telegram message edit timeout (expected in sandboxed environments)')
+      } else if (error.message.includes('ETIMEDOUT') || error.message.includes('fetch failed')) {
+        console.error('Telegram API connection timeout for edit (expected in sandboxed environments):', error.message)
+      } else {
+        console.error('Error editing Telegram message:', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        })
+      }
+    } else {
+      console.error('Unknown error editing Telegram message:', error)
+    }
   }
 }
 

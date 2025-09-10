@@ -92,10 +92,19 @@ export async function logLLMUsage(entry: LLMUsageLogEntry): Promise<void> {
       .insert(logData)
 
     if (error) {
-      console.error('Failed to log LLM usage:', error)
+      console.error('Failed to log LLM usage:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      })
     }
   } catch (err) {
-    console.error('Error logging LLM usage:', err)
+    console.error('Error logging LLM usage:', {
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+      error: err
+    })
   }
 }
 
@@ -119,13 +128,22 @@ export async function createConversationSession(session: ConversationSession): P
       .single()
 
     if (error) {
-      console.error('Failed to create conversation session:', error)
+      console.error('Failed to create conversation session:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      })
       return null
     }
 
     return data?.id || null
   } catch (err) {
-    console.error('Error creating conversation session:', err)
+    console.error('Error creating conversation session:', {
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+      error: err
+    })
     return null
   }
 }
@@ -142,10 +160,19 @@ export async function endConversationSession(sessionId: string): Promise<void> {
       .eq('id', sessionId)
 
     if (error) {
-      console.error('Failed to end conversation session:', error)
+      console.error('Failed to end conversation session:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      })
     }
   } catch (err) {
-    console.error('Error ending conversation session:', err)
+    console.error('Error ending conversation session:', {
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+      error: err
+    })
   }
 }
 
