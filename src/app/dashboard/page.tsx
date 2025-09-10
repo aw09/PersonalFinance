@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import WalletList from '@/components/wallets/WalletList'
 import TransactionList from '@/components/transactions/TransactionList'
 import AddTransactionModal from '@/components/transactions/AddTransactionModal'
+import ReceiptUpload from '@/components/transactions/ReceiptUpload'
 import BudgetList from '@/components/budgets/BudgetList'
 import CreateBudgetModal from '@/components/budgets/CreateBudgetModal'
 import TelegramLinkComponent from '@/components/telegram/TelegramLinkComponent'
@@ -31,6 +32,7 @@ export default function Dashboard() {
   const [showTelegramLink, setShowTelegramLink] = useState(false)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [firstWalletId, setFirstWalletId] = useState<string | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -44,10 +46,16 @@ export default function Dashboard() {
       
       setUser(session.user)
       setLoading(false)
+      
+      // Fetch first wallet for receipt upload
+      if (session.access_token) {
+        fetchFirstWallet(session.access_token)
+      }
     }
 
     getSession()
 
+    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (event === 'SIGNED_OUT' || !session?.user) {
@@ -55,12 +63,35 @@ export default function Dashboard() {
         } else {
           setUser(session.user)
           setLoading(false)
+          // Fetch first wallet for receipt upload
+          if (session.access_token) {
+            fetchFirstWallet(session.access_token)
+          }
         }
       }
     )
 
     return () => subscription.unsubscribe()
   }, [router])
+
+  const fetchFirstWallet = async (token: string) => {
+    try {
+      const response = await fetch('/api/wallets', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        if (data.wallets && data.wallets.length > 0) {
+          setFirstWalletId(data.wallets[0].id)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch wallets:', error)
+    }
+  }
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -271,6 +302,14 @@ export default function Dashboard() {
 
             {/* Wallets Section */}
             <WalletList key={`wallets-${refreshKey}`} />
+
+            {/* Receipt Upload Section */}
+            {firstWalletId && (
+              <ReceiptUpload 
+                walletId={firstWalletId} 
+                onTransactionCreated={handleDataUpdated}
+              />
+            )}
 
             {/* Budgets Section */}
             <BudgetList key={`budgets-${refreshKey}`} />
