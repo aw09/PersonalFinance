@@ -40,6 +40,8 @@ import {
   InlineKeyboard,
   getMainMenuKeyboard
 } from '@/lib/telegramUI'
+import { generateGeminiReply } from '@/lib/gemini'
+import { handleGeminiTelegramQuery } from '@/lib/geminiAgent'
 
 // Telegram Bot webhook handler
 export async function POST(request: NextRequest) {
@@ -136,12 +138,30 @@ async function handleMessage(message: any, botToken: string) {
   }
 
   // Default response for unrecognized messages
-  await sendTelegramMessage(
-    botToken, 
-    chatId, 
-    '🤔 I didn\'t understand that. Use /start to see the main menu or /help for assistance.',
-    mainMenuKeyboard
-  )
+  // If GEMINI_API_KEY is present, forward unknown messages to the LLM for a helpful reply.
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const reply = await handleGeminiTelegramQuery(telegramUserId, chatId, text || '')
+      // Don't always show main menu - let the LLM decide based on response type
+      const shouldShowMenu = reply.includes('Use /menu') || reply.includes('couldn\'t map your request')
+      await sendTelegramMessage(botToken, chatId, reply, shouldShowMenu ? mainMenuKeyboard : undefined)
+    } catch (err) {
+      console.error('LLM agent failed, sending generic reply:', err)
+      await sendTelegramMessage(
+        botToken,
+        chatId,
+        "🤔 I didn't understand that. Use /start to see the main menu or /help for assistance.",
+        mainMenuKeyboard
+      )
+    }
+  } else {
+    await sendTelegramMessage(
+      botToken, 
+      chatId, 
+      '🤔 I didn\'t understand that. Use /start to see the main menu or /help for assistance.',
+      mainMenuKeyboard
+    )
+  }
 
   return NextResponse.json({ ok: true })
 }
