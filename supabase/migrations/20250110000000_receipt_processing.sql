@@ -1,6 +1,9 @@
 -- Receipt Processing Migration
 -- Add receipt storage and processing capabilities
 
+-- Enable required extensions
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 -- Create receipt_images table to store receipt metadata and Supabase storage paths
 CREATE TABLE IF NOT EXISTS receipt_images (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
