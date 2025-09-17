@@ -1,6 +1,9 @@
 -- Migration to add telegram_link_tokens and telegram_sessions tables
 -- Also add telegram fields to profiles table
 
+-- Enable uuid-ossp extension for UUID generation
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 -- Add telegram fields to profiles table
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS telegram_user_id BIGINT UNIQUE;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS telegram_chat_id BIGINT;
