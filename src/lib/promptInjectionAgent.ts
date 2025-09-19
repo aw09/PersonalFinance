@@ -231,7 +231,11 @@ function combineDetectionResults(
   return {
     isSafe: patternResult.isSafe && aiResult.isSafe,
     threatLevel: combinedThreatLevel,
-    detectedPatterns: [...new Set([...patternResult.detectedPatterns, ...aiResult.detectedPatterns])],
+    // Merge arrays and dedupe without using Set spread (avoids downlevelIteration issues)
+    detectedPatterns: (() => {
+      const merged = patternResult.detectedPatterns.concat(aiResult.detectedPatterns || [])
+      return merged.filter((v, i, a) => a.indexOf(v) === i)
+    })(),
     reasoning: `Pattern Analysis: ${patternResult.reasoning}. AI Analysis: ${aiResult.reasoning}`
   }
 }
@@ -306,5 +310,9 @@ export function generateSecurityMessage(detectionResult: InjectionDetectionResul
     high: '🚨 Your message appears to contain malicious content and cannot be processed. Please ask legitimate questions about personal finance.'
   }
 
-  return messages[detectionResult.threatLevel] || messages.medium
+  const level: 'low' | 'medium' | 'high' = (detectionResult.threatLevel === 'low' || detectionResult.threatLevel === 'medium' || detectionResult.threatLevel === 'high')
+    ? detectionResult.threatLevel
+    : 'medium'
+
+  return messages[level]
 }

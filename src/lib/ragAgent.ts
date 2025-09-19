@@ -183,7 +183,10 @@ export async function enhanceWithKnowledge(
       enhancedPrompt,
       relevantKnowledge: topChunks,
       confidence: calculateRAGConfidence(topChunks, context.userQuery),
-      sourceTypes: [...new Set(topChunks.map(chunk => chunk.type))]
+      sourceTypes: (() => {
+        const arr = topChunks.map(chunk => chunk.type)
+        return arr.filter((v, i, a) => a.indexOf(v) === i)
+      })()
     }
   } catch (error) {
     console.error('RAG enhancement error:', error)
@@ -377,7 +380,8 @@ function calculateRAGConfidence(chunks: KnowledgeChunk[], query: string): number
   if (chunks.length === 0) return 0.1
 
   const avgRelevance = chunks.reduce((sum, chunk) => sum + chunk.relevanceScore, 0) / chunks.length
-  const diversityBonus = new Set(chunks.map(c => c.type)).size * 0.1
+  const uniqueTypes = chunks.map(c => c.type).filter((v, i, a) => a.indexOf(v) === i)
+  const diversityBonus = uniqueTypes.length * 0.1
   const quantityBonus = Math.min(chunks.length * 0.1, 0.3)
 
   return Math.min(avgRelevance + diversityBonus + quantityBonus, 1.0)
@@ -402,8 +406,14 @@ export function addKnowledgeChunk(chunk: KnowledgeChunk): void {
 export function getKnowledgeSummary(chunks: KnowledgeChunk[]): string {
   if (chunks.length === 0) return 'No relevant knowledge found.'
 
-  const types = [...new Set(chunks.map(c => c.type))]
-  const sources = [...new Set(chunks.map(c => c.source))]
+  const types = (() => {
+    const arr = chunks.map(c => c.type)
+    return arr.filter((v, i, a) => a.indexOf(v) === i)
+  })()
+  const sources = (() => {
+    const arr = chunks.map(c => c.source)
+    return arr.filter((v, i, a) => a.indexOf(v) === i)
+  })()
   
   return `Found ${chunks.length} relevant knowledge pieces covering ${types.join(', ')} from ${sources.length} source(s).`
 }

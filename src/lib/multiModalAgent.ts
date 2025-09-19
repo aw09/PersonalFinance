@@ -71,10 +71,10 @@ export async function processMultiModalInput(
     const contentType = expectedType || await classifyContent(textResult.text, userId)
     
     // Step 4: Extract structured data if requested
-    let structuredData: StructuredData | undefined
-    if (extractStructuredData) {
-      structuredData = await extractStructuredData(textResult.text, contentType, userId)
-    }
+      let structuredData: StructuredData | undefined
+      if (extractStructuredData) {
+        structuredData = await extractStructuredDataFromText(textResult.text, contentType, userId)
+      }
     
     const processingTime = Date.now() - startTime
     
@@ -87,7 +87,8 @@ export async function processMultiModalInput(
       originalFormat: inputInfo.format
     }
   } catch (error) {
-    console.error('MultiModal processing error:', error)
+  const err = error instanceof Error ? error : new Error(String(error))
+  console.error('MultiModal processing error:', { message: err.message, stack: err.stack })
     return {
       extractedText: '',
       contentType: 'unknown',
@@ -220,7 +221,8 @@ If the image is unclear or text is hard to read, mention the confidence level fo
       confidence
     }
   } catch (error) {
-    console.error('Image text extraction error:', error)
+  const err = error instanceof Error ? error : new Error(String(error))
+  console.error('Image text extraction error:', { message: err.message, stack: err.stack })
     return {
       text: 'Error: Could not extract text from image',
       confidence: 0
@@ -264,13 +266,14 @@ Respond with just the category name.`
     
     return validTypes.includes(classification as any) ? classification as MultiModalResult['contentType'] : 'unknown'
   } catch (error) {
-    console.error('Content classification error:', error)
+  const err = error instanceof Error ? error : new Error(String(error))
+  console.error('Content classification error:', { message: err.message, stack: err.stack })
     return 'unknown'
   }
 }
 
 // Extract structured data based on content type
-async function extractStructuredData(
+async function extractStructuredDataFromText(
   text: string,
   contentType: MultiModalResult['contentType'],
   userId?: string
@@ -288,7 +291,8 @@ async function extractStructuredData(
         return undefined
     }
   } catch (error) {
-    console.error('Structured data extraction error:', error)
+  const err = error instanceof Error ? error : new Error(String(error))
+  console.error('Structured data extraction error:', { message: err.message, stack: err.stack })
     return undefined
   }
 }
@@ -330,7 +334,8 @@ If any information is not available, use null. Be accurate with numbers and date
     const data = extractJSON(response.text)
     return data || { metadata: { extractionError: 'Failed to parse receipt data' } }
   } catch (error) {
-    return { metadata: { extractionError: error.message } }
+  const err = error instanceof Error ? error : new Error(String(error))
+  return { metadata: { extractionError: err.message } }
   }
 }
 
@@ -371,7 +376,8 @@ Focus on numerical data and dates. Use null for unavailable information.`
     const data = extractJSON(response.text)
     return data || { metadata: { extractionError: 'Failed to parse document data' } }
   } catch (error) {
-    return { metadata: { extractionError: error.message } }
+  const err = error instanceof Error ? error : new Error(String(error))
+  return { metadata: { extractionError: err.message } }
   }
 }
 
@@ -408,7 +414,8 @@ Focus on extracting numerical data points and their labels accurately.`
     const data = extractJSON(response.text)
     return data || { metadata: { extractionError: 'Failed to parse table data' } }
   } catch (error) {
-    return { metadata: { extractionError: error.message } }
+  const err = error instanceof Error ? error : new Error(String(error))
+  return { metadata: { extractionError: err.message } }
   }
 }
 
