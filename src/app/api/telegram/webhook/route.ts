@@ -41,7 +41,8 @@ import {
   getMainMenuKeyboard
 } from '@/lib/telegramUI'
 import { generateGeminiReply } from '@/lib/gemini'
-import { handleGeminiTelegramQuery } from '@/lib/geminiAgent'
+// import { handleGeminiTelegramQuery } from '@/lib/geminiAgent'
+import { handleAdvancedTelegramQuery } from '@/lib/geminiAgentV3'
 
 // Telegram Bot webhook handler
 export async function POST(request: NextRequest) {
@@ -141,7 +142,8 @@ async function handleMessage(message: any, botToken: string) {
   // If GEMINI_API_KEY is present, forward unknown messages to the LLM for a helpful reply.
   if (process.env.GEMINI_API_KEY) {
     try {
-      const reply = await handleGeminiTelegramQuery(telegramUserId, chatId, text || '')
+      // const reply = await handleGeminiTelegramQuery(telegramUserId, chatId, text || '')
+      const reply = await handleAdvancedTelegramQuery(telegramUserId, chatId, text, { includeConfidence: true, enableRAG: true })
       // Don't always show main menu - let the LLM decide based on response type
       const shouldShowMenu = reply.includes('Use /menu') || reply.includes('couldn\'t map your request')
       await sendTelegramMessage(botToken, chatId, reply, shouldShowMenu ? mainMenuKeyboard : undefined)
