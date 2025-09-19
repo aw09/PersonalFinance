@@ -76,7 +76,7 @@ export async function handleAdvancedTelegramQuery(
     // Build user context
     const [wallets, transactions, budgets, categories] = await Promise.all([
       getTelegramUserWallets(telegramUserId),
-      getTelegramUserTransactions(telegramUserId, 5),
+      getTelegramUserTransactions(telegramUserId, undefined, 5),
       getTelegramUserBudgets(telegramUserId),
       getTelegramUserCategories(telegramUserId)
     ])
@@ -124,10 +124,11 @@ export async function handleAdvancedTelegramQuery(
     return response
 
   } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error))
     console.error('Advanced Telegram query error:', {
       telegramUserId,
-      error: error.message,
-      stack: error.stack
+      error: err.message,
+      stack: err.stack
     })
 
     return '❌ I encountered an error processing your request. Please try again in a moment.'
@@ -159,7 +160,7 @@ export async function handleEnhancedTelegramTextQuery(
     // Build simplified context
     const [wallets, transactions, budgets] = await Promise.all([
       getTelegramUserWallets(telegramUserId),
-      getTelegramUserTransactions(telegramUserId, 3),
+      getTelegramUserTransactions(telegramUserId, undefined, 5),
       getTelegramUserBudgets(telegramUserId)
     ])
 
@@ -295,7 +296,8 @@ export async function performSystemHealthCheck(): Promise<string> {
     return response
     
   } catch (error) {
-    return `❌ Health check failed: ${error.message}`
+  const err = error instanceof Error ? error : new Error(String(error))
+  return `❌ Health check failed: ${err.message}`
   }
 }
 
