@@ -1,94 +1,79 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Database } from '@/types/database';
+import { withAuth, createErrorResponse, createSuccessResponse, withErrorHandling, AuthenticatedRequest } from '@/lib/apiMiddleware';
 
-export async function GET(request: NextRequest) {
-  const { getSupabaseUser, createAuthSupabase, getAuthToken } = await import('@/lib/authSupabase');
-  const user = await getSupabaseUser(request);
-  if (!user) {
-    return NextResponse.json({ error: 'Invalid or missing token' }, { status: 401 });
-  }
-  const token = getAuthToken(request)!;
-  const supabase = createAuthSupabase(token);
-
+export const GET = withAuth(async (request: AuthenticatedRequest) => {
   try {
-    const { data: wallets, error } = await supabase
+    const { data: wallets, error } = await request.supabase
       .from('wallets')
       .select('*')
-      .eq('owner_id', user.id)
+      .eq('owner_id', request.user.id)
       .order('created_at', { ascending: false });
 
     if (error) {
       console.error('Error fetching wallets:', error);
-      return NextResponse.json({ error: 'Failed to fetch wallets' }, { status: 500 });
+      return createErrorResponse('Failed to fetch wallets');
     }
 
-    return NextResponse.json({ wallets });
+    return createSuccessResponse({ wallets });
   } catch (error) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return createErrorResponse('Internal server error');
   }
-}
+});
 
-export async function POST(request: NextRequest) {
-  const { getSupabaseUser, createAuthSupabase, getAuthToken } = await import('@/lib/authSupabase');
-  const user = await getSupabaseUser(request);
-  if (!user) {
-    return NextResponse.json({ error: 'Invalid or missing token' }, { status: 401 });
-  }
-  const token = getAuthToken(request)!;
-  const supabase = createAuthSupabase(token);
-
+export const POST = withAuth(async (request: AuthenticatedRequest) => {
   try {
     const body = await request.json();
     const { name, description, currency = 'USD' } = body;
 
     if (!name) {
-      return NextResponse.json({ error: 'Wallet name is required' }, { status: 400 });
+      return createErrorResponse('Wallet name is required', 400);
     }
 
     // Ensure the user profile exists before creating wallet
-    const { data: existingProfile } = await supabase
+    const { data: existingProfile } = await request.supabase
       .from('profiles')
       .select('id')
-      .eq('id', user.id)
+      .eq('id', request.user.id)
       .single();
 
     // If profile doesn't exist, create it
     if (!existingProfile) {
-      const { error: profileError } = await supabase
+      const { error: profileError } = await request.supabase
         .from('profiles')
         .insert({
-          id: user.id,
-          email: user.email || '',
-          full_name: user.user_metadata?.full_name || null
+          id: request.user.id,
+          email: request.user.email || '',
+          full_name: request.user.user_metadata?.full_name || null
         });
 
       if (profileError) {
         console.error('Error creating profile:', profileError);
-        return NextResponse.json({ error: 'Failed to create user profile' }, { status: 500 });
+        return createErrorResponse('Failed to create user profile');
       }
     }
 
-    const { data: wallet, error } = await supabase
+    const { data: wallet, error } = await request.supabase
       .from('wallets')
       .insert({
         name,
         description,
         currency,
-        owner_id: user.id
+        owner_id: request.user.id
       })
       .select()
       .single();
 
     if (error) {
       console.error('Error creating wallet:', error);
-      return NextResponse.json({ error: 'Failed to create wallet' }, { status: 500 });
+      return createErrorResponse('Failed to create wallet');
     }
 
-    return NextResponse.json({ wallet }, { status: 201 });
+    return createSuccessResponse({ wallet }, 201);
   } catch (error) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return createErrorResponse('Internal server error');
   }
-}
+});
