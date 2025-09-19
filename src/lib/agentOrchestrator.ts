@@ -182,16 +182,22 @@ export async function orchestrateQuery(
       }, request.userId)
     }
 
-    // Step 8: Logging
+    // Step 8: Logging — use LLMUsageLogEntry shape (camelCase) and include metadata
     await logLLMUsage({
-      user_id: request.userId,
-      telegram_user_id: request.telegramUserId,
+      userId: request.userId,
+      telegramUserId: request.telegramUserId,
+      provider: 'gemini',
+      model: 'gemini-2.0-flash',
       prompt: processedInput,
       response: finalResponse,
-      tools_used: toolsUsed,
-      confidence_score: confidenceResult?.overall,
-      processing_steps: stepsExecuted,
-      knowledge_chunks_used: knowledgeUsed
+      status: 'success',
+      responseTimeMs: Date.now() - startTime,
+      metadata: {
+        toolsUsed,
+        confidenceScore: confidenceResult?.overall,
+        processingSteps: stepsExecuted,
+        knowledgeChunksUsed: knowledgeUsed
+      }
     })
 
     return {
@@ -361,7 +367,8 @@ export async function performAgentHealthCheck(): Promise<{
       }
     } catch (error) {
       results[agentName] = false
-      details.push(`${agentName} agent threw an error: ${error.message}`)
+      const err = error instanceof Error ? error : new Error(String(error))
+      details.push(`${agentName} agent threw an error: ${err.message}`)
     }
   }
 
