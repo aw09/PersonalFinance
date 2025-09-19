@@ -1,6 +1,7 @@
 // API middleware utilities for handling common patterns
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseUser, createAuthSupabase, getAuthToken } from './authSupabase'
+import { ValidationService } from '@/services/ValidationService'
 
 export interface AuthenticatedRequest extends NextRequest {
   user: any
@@ -52,7 +53,7 @@ export function createSuccessResponse<T>(data: T, status: number = 200) {
 }
 
 /**
- * Handles common API request validation
+ * Enhanced validation using ValidationService
  * Implements Single Responsibility Principle by separating validation logic
  */
 export function validateRequiredFields(body: any, requiredFields: string[]): string | null {
@@ -62,6 +63,26 @@ export function validateRequiredFields(body: any, requiredFields: string[]): str
     }
   }
   return null
+}
+
+/**
+ * Validate request body using ValidationService
+ * Implements Dependency Inversion Principle by using the validation service
+ */
+export function validateRequestBody<T extends Record<string, any>>(
+  body: T,
+  entityType: 'wallet' | 'transaction' | 'budget'
+): { isValid: boolean; errors: string[] } {
+  switch (entityType) {
+    case 'wallet':
+      return ValidationService.validateWallet(body)
+    case 'transaction':
+      return ValidationService.validateTransaction(body)
+    case 'budget':
+      return ValidationService.validateBudget(body)
+    default:
+      return { isValid: true, errors: [] }
+  }
 }
 
 /**
