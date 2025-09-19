@@ -150,11 +150,26 @@ Respond with JSON:
 }
 
 Guidelines:
-1. Select tools in logical order
-2. Extract parameters from user query when possible
-3. Use context to fill missing parameters
-4. Prefer fewer, more comprehensive tools over many small ones
-5. Include fallback options for critical operations`
+1. Only select tools for specific financial actions (add, create, update, get/show/list data)
+2. For general questions about finance concepts, advice, explanations, or "how to" questions, return empty selectedTools array
+3. Extract parameters from user query when possible
+4. Use context to fill missing parameters
+5. Prefer fewer, more comprehensive tools over many small ones
+6. Include fallback options for critical operations
+7. If the user is asking for advice or general information without needing to perform actions, return no tools
+
+Examples of queries that DON'T need tools:
+- "How should I budget?"
+- "What is compound interest?"
+- "Give me advice on saving money"
+- "Explain investment strategies"
+- "How do I manage debt?"
+
+Examples of queries that DO need tools:
+- "Add a $50 expense for groceries"
+- "Show my recent transactions"
+- "Create a new wallet"
+- "What's my current balance?"`
 
   try {
     const response = await generateGeminiReply(selectionPrompt, {
@@ -377,7 +392,7 @@ function getFallbackToolSelection(userQuery: string, context: UserContext): Tool
   const lowerQuery = userQuery.toLowerCase()
   const fallbackTools: ToolCall[] = []
 
-  // Simple pattern matching for fallback
+  // Simple pattern matching for fallback - only add tools for clear financial actions
   if (lowerQuery.includes('add') && (lowerQuery.includes('transaction') || lowerQuery.includes('expense') || lowerQuery.includes('income'))) {
     fallbackTools.push({
       name: 'add_transaction',
@@ -402,11 +417,33 @@ function getFallbackToolSelection(userQuery: string, context: UserContext): Tool
     }
   }
 
+  if (lowerQuery.includes('create')) {
+    if (lowerQuery.includes('wallet')) {
+      // Don't auto-create, let the LLM handle this conversationally
+    }
+    if (lowerQuery.includes('budget')) {
+      // Don't auto-create, let the LLM handle this conversationally
+    }
+  }
+
+  // For general questions (how, what, why, explain, advice, help, etc.), return no tools
+  const generalQuestionWords = ['how', 'what', 'why', 'explain', 'advice', 'help', 'should', 'can', 'tell me', 'recommend']
+  const isGeneralQuestion = generalQuestionWords.some(word => lowerQuery.includes(word))
+  
+  if (isGeneralQuestion && fallbackTools.length === 0) {
+    return {
+      selectedTools: [], // No tools needed for general questions
+      executionPlan: [],
+      reasoning: 'General question that can be answered without tools',
+      confidence: 0.8
+    }
+  }
+
   return {
     selectedTools: fallbackTools,
     executionPlan: [],
-    reasoning: 'Fallback tool selection based on keyword matching',
-    confidence: 0.3
+    reasoning: fallbackTools.length > 0 ? 'Fallback tool selection based on keyword matching' : 'No tools needed for this query',
+    confidence: fallbackTools.length > 0 ? 0.3 : 0.8
   }
 }
 

@@ -155,20 +155,34 @@ export async function orchestrateQuery(
 
     toolsUsed.push(...toolSelection.selectedTools.map(tool => tool.name))
 
-    // Step 5: Tool Execution (this would integrate with existing tool execution logic)
-    stepsExecuted.push('tool_execution')
-    const toolResults = await executeTools(toolSelection.selectedTools, request)
+    // Step 5: Tool Execution and Response Generation
+    let finalResponse: string
+    let toolResults: any[] = []
 
-    // Step 6: Final Response Generation
-    stepsExecuted.push('response_generation')
-    const finalResponse = await generateFinalResponse(
-      enhancedPrompt,
-      toolResults,
-      structuredData,
-      request.userId
-    )
+    if (toolSelection.selectedTools.length > 0) {
+      // Execute tools and generate response based on tool results
+      stepsExecuted.push('tool_execution')
+      toolResults = await executeTools(toolSelection.selectedTools, request)
 
-    // Step 7: Confidence Scoring (if requested)
+      stepsExecuted.push('response_generation_with_tools')
+      finalResponse = await generateFinalResponse(
+        enhancedPrompt,
+        toolResults,
+        structuredData,
+        request.userId
+      )
+    } else {
+      // No tools selected - handle as general conversation/question
+      stepsExecuted.push('general_response_generation')
+      finalResponse = await generateGeneralResponse(
+        enhancedPrompt,
+        processedInput,
+        request.context,
+        request.userId
+      )
+    }
+
+    // Step 6: Confidence Scoring (if requested)
     let confidenceResult: any = undefined
     if (request.options.includeConfidence) {
       stepsExecuted.push('confidence_scoring')
@@ -182,7 +196,7 @@ export async function orchestrateQuery(
       }, request.userId)
     }
 
-    // Step 8: Logging — use LLMUsageLogEntry shape (camelCase) and include metadata
+    // Step 7: Logging — use LLMUsageLogEntry shape (camelCase) and include metadata
     await logLLMUsage({
       userId: request.userId,
       telegramUserId: request.telegramUserId,
@@ -292,6 +306,50 @@ Focus on being helpful and actionable while maintaining accuracy.`
   } catch (error) {
     console.error('Final response generation error:', error)
     return 'I processed your request successfully, but encountered an issue generating the response. Please try asking your question again.'
+  }
+}
+
+// Generate general response for questions that don't require tools
+async function generateGeneralResponse(
+  enhancedPrompt: string,
+  originalQuery: string,
+  context: OrchestrationRequest['context'],
+  userId: string
+): Promise<string> {
+  const generalResponsePrompt = `You are a helpful personal finance assistant. The user has asked a general question that doesn't require specific financial tools or data operations.
+
+Enhanced Prompt (with relevant financial knowledge): ${enhancedPrompt}
+
+Original User Query: "${originalQuery}"
+
+User Context:
+- Has wallets: ${context.hasWallets}
+- Has transactions: ${context.hasTransactions}
+- Has budgets: ${context.hasBudgets}
+- Default currency: ${context.defaultCurrency}
+- Experience level: ${context.experienceLevel || 'intermediate'}
+
+Instructions:
+1. Answer the user's question directly and helpfully
+2. Use the enhanced prompt (which includes relevant financial knowledge) to provide comprehensive advice
+3. Be conversational and encouraging
+4. Provide actionable financial advice when appropriate
+5. If the question is about personal finance concepts, explain them clearly
+6. If asked about the user's specific data but tools aren't needed, guide them on how to find the information
+7. Don't mention that you couldn't use tools - just focus on providing the best answer possible
+
+Respond naturally as a knowledgeable personal finance assistant.`
+
+  try {
+    const response = await generateGeminiReply(generalResponsePrompt, {
+      userId,
+      intent: 'general_conversation'
+    })
+
+    return response.text
+  } catch (error) {
+    console.error('General response generation error:', error)
+    return 'I\'m here to help with your personal finance questions! Could you please rephrase your question so I can provide you with the best advice?'
   }
 }
 
