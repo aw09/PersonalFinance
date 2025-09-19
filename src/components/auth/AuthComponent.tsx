@@ -29,12 +29,12 @@ export default function AuthComponent() {
                   inputPlaceholder: theme === 'dark' ? 'rgb(156, 163, 175)' : 'rgb(156, 163, 175)',
                   messageText: theme === 'dark' ? 'rgb(243, 244, 246)' : 'rgb(17, 24, 39)',
                   messageTextDanger: theme === 'dark' ? '#f87171' : '#ef4444',
-                  messageTextSuccess: theme === 'dark' ? '#34d399' : '#10b981',
+                  // messageTextSuccess is not supported in ThemeSupa types
                   anchorTextColor: theme === 'dark' ? '#60a5fa' : '#3b82f6',
                   anchorTextHoverColor: theme === 'dark' ? '#3b82f6' : '#2563eb',
-                  // Fix message background visibility
-                  messageBackground: theme === 'dark' ? 'rgba(31, 41, 55, 0.8)' : 'rgba(249, 250, 251, 0.9)',
-                  messageBorder: theme === 'dark' ? 'rgb(55, 65, 81)' : 'rgb(209, 213, 219)',
+                  // Custom colors that may not be in ThemeSupa types
+                  // messageBackground: theme === 'dark' ? 'rgba(31, 41, 55, 0.8)' : 'rgba(249, 250, 251, 0.9)',
+                  // messageBorder: theme === 'dark' ? 'rgb(55, 65, 81)' : 'rgb(209, 213, 219)',
                 },
                 space: {
                   inputPadding: '12px 16px',
@@ -43,13 +43,13 @@ export default function AuthComponent() {
                 borderWidths: {
                   buttonBorderWidth: '1px',
                   inputBorderWidth: '1px',
-                  messageBorderWidth: '1px',
+                  // messageBorderWidth is not supported in ThemeSupa types
                 },
                 radii: {
                   borderRadiusButton: '12px',
                   buttonBorderRadius: '12px',
                   inputBorderRadius: '12px',
-                  messageBorderRadius: '8px',
+                  // messageBorderRadius is not supported in ThemeSupa types
                 },
               },
             },
