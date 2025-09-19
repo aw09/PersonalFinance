@@ -79,7 +79,7 @@ export async function handleEnhancedTelegramQuery(
     // Build user profile for context
     const [wallets, transactions, budgets] = await Promise.all([
       getTelegramUserWallets(telegramUserId),
-      getTelegramUserTransactions(telegramUserId, 5),
+      getTelegramUserTransactions(telegramUserId, undefined, 5),
       getTelegramUserBudgets(telegramUserId)
     ])
 
@@ -123,21 +123,26 @@ export async function handleEnhancedTelegramQuery(
 
     // Log the interaction
     await logLLMUsage({
-      user_id: user.id,
-      telegram_user_id: telegramUserId,
+      userId: user.id,
+      telegramUserId: telegramUserId,
+      provider: 'gemini',
+      model: 'gemini-2.0-flash',
       prompt: userMessage,
       response: finalResponse,
-      intent: intentAnalysis.intent,
-      tools_used: toolResults.map(r => r.toolName),
-      confidence_score: includeConfidence ? 
-        (await calculateConfidenceScore({
-          userQuery: userMessage,
-          aiResponse: finalResponse,
-          toolsUsed: toolResults.map(r => r.toolName),
-          dataRetrieved: toolResults.map(r => r.result.data).filter(Boolean),
-          executionTime: Date.now() - startTime,
-          hasErrors: toolResults.some(r => !r.result.success)
-        }, user.id)).overall : undefined
+      status: 'success',
+      intentDetected: intentAnalysis.intent,
+      metadata: {
+        tools_used: toolResults.map(r => r.toolName),
+        confidence_score: includeConfidence ? 
+          (await calculateConfidenceScore({
+            userQuery: userMessage,
+            aiResponse: finalResponse,
+            toolsUsed: toolResults.map(r => r.toolName),
+            dataRetrieved: toolResults.map(r => r.result.data).filter(Boolean),
+            executionTime: Date.now() - startTime,
+            hasErrors: toolResults.some(r => !r.result.success)
+          }, user.id)).overall : undefined
+      }
     })
 
     return finalResponse + confidenceInfo
@@ -295,7 +300,7 @@ Generate a helpful, friendly response that acknowledges what was done and provid
 }
 
 // Tool execution functions with proper descriptions
-async function executeAddTransaction(params: any, telegramUserId: number): ToolResult {
+async function executeAddTransaction(params: any, telegramUserId: number): Promise<ToolResult> {
   try {
     const wallets = await getTelegramUserWallets(telegramUserId)
     if (!wallets || wallets.length === 0) {
@@ -310,13 +315,14 @@ async function executeAddTransaction(params: any, telegramUserId: number): ToolR
       return { success: false, error: `Wallet "${params.wallet_name}" not found.` }
     }
 
-    const transaction = await createTelegramUserTransaction(telegramUserId, {
-      wallet_id: targetWallet.id,
-      amount: params.amount,
-      description: params.description,
-      type: params.type,
-      category_name: params.category
-    })
+    const transaction = await createTelegramUserTransaction(
+      telegramUserId,
+      targetWallet.id,
+      params.amount,
+      params.description,
+      params.type,
+      undefined // categoryId
+    )
 
     return { 
       success: true, 
@@ -328,13 +334,14 @@ async function executeAddTransaction(params: any, telegramUserId: number): ToolR
   }
 }
 
-async function executeCreateWallet(params: any, telegramUserId: number): ToolResult {
+async function executeCreateWallet(params: any, telegramUserId: number): Promise<ToolResult> {
   try {
-    const wallet = await createTelegramUserWallet(telegramUserId, {
-      name: params.name,
-      currency: params.currency,
-      balance: params.balance || 0
-    })
+    const wallet = await createTelegramUserWallet(
+      telegramUserId, 
+      params.name,
+      undefined, // description is optional
+      params.currency
+    )
 
     return {
       success: true,
@@ -346,7 +353,7 @@ async function executeCreateWallet(params: any, telegramUserId: number): ToolRes
   }
 }
 
-async function executeUpdateWallet(params: any, telegramUserId: number): ToolResult {
+async function executeUpdateWallet(params: any, telegramUserId: number): Promise<ToolResult> {
   try {
     const wallets = await getTelegramUserWallets(telegramUserId)
     const targetWallet = wallets?.find(w => 
@@ -357,7 +364,7 @@ async function executeUpdateWallet(params: any, telegramUserId: number): ToolRes
       return { success: false, error: `Wallet "${params.current_name}" not found` }
     }
 
-    const updates: any = {}
+    const updates: { name?: string; description?: string; currency?: string } = {}
     if (params.new_name) updates.name = params.new_name
     if (params.new_currency) updates.currency = params.new_currency
 
@@ -377,12 +384,26 @@ async function executeUpdateWallet(params: any, telegramUserId: number): ToolRes
   }
 }
 
-async function executeGetTransactions(params: any, telegramUserId: number): ToolResult {
+async function executeGetTransactions(params: any, telegramUserId: number): Promise<ToolResult> {
   try {
+    // Check if wallet_name is provided to filter transactions
+    let walletId: string | undefined = undefined;
+    
+    if (params.wallet_name) {
+      const wallets = await getTelegramUserWallets(telegramUserId);
+      const targetWallet = wallets?.find(w => 
+        w.name.toLowerCase().includes(params.wallet_name.toLowerCase())
+      );
+      if (targetWallet) {
+        walletId = targetWallet.id;
+      }
+    }
+    
     const transactions = await getTelegramUserTransactions(
       telegramUserId, 
+      walletId,
       params.limit || 10
-    )
+    );
 
     return {
       success: true,
@@ -394,7 +415,7 @@ async function executeGetTransactions(params: any, telegramUserId: number): Tool
   }
 }
 
-async function executeGetWallets(telegramUserId: number): ToolResult {
+async function executeGetWallets(telegramUserId: number): Promise<ToolResult> {
   try {
     const wallets = await getTelegramUserWallets(telegramUserId)
     
@@ -408,14 +429,44 @@ async function executeGetWallets(telegramUserId: number): ToolResult {
   }
 }
 
-async function executeCreateBudget(params: any, telegramUserId: number): ToolResult {
+async function executeCreateBudget(params: any, telegramUserId: number): Promise<ToolResult> {
   try {
-    const budget = await createTelegramUserBudget(telegramUserId, {
-      name: params.name,
-      amount: params.amount,
-      period: params.period,
-      category_name: params.category
-    })
+    // We need to get the default wallet ID if not specified
+    const wallets = await getTelegramUserWallets(telegramUserId);
+    if (!wallets || wallets.length === 0) {
+      return { success: false, error: 'No wallets found. Please create a wallet first.' };
+    }
+    
+    // Use the first wallet by default or find a specific one if wallet_name is provided
+    const targetWallet = params.wallet_name 
+      ? wallets.find(w => w.name.toLowerCase().includes(params.wallet_name.toLowerCase()))
+      : wallets[0];
+    
+    if (!targetWallet) {
+      return { success: false, error: `Wallet "${params.wallet_name}" not found.` };
+    }
+    
+    // Find or create a category if needed
+    let categoryId: string | undefined = undefined;
+    if (params.category) {
+      const categories = await getTelegramUserCategories(telegramUserId);
+      const existingCategory = categories.find(c => 
+        c.name.toLowerCase() === params.category.toLowerCase()
+      );
+      
+      if (existingCategory) {
+        categoryId = existingCategory.id;
+      }
+    }
+    
+    const budget = await createTelegramUserBudget(
+      telegramUserId,
+      targetWallet.id,
+      params.name,
+      params.amount,
+      params.period || 'monthly',
+      categoryId
+    );
 
     return {
       success: true,
@@ -427,7 +478,7 @@ async function executeCreateBudget(params: any, telegramUserId: number): ToolRes
   }
 }
 
-async function executeGetBudgets(telegramUserId: number): ToolResult {
+async function executeGetBudgets(telegramUserId: number): Promise<ToolResult> {
   try {
     const budgets = await getTelegramUserBudgets(telegramUserId)
     
