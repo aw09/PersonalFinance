@@ -31,6 +31,7 @@ export default function Dashboard() {
   const [showCreateBudget, setShowCreateBudget] = useState(false)
   const [showTelegramLink, setShowTelegramLink] = useState(false)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
+  const [activeNavItem, setActiveNavItem] = useState('home')
   const [refreshKey, setRefreshKey] = useState(0)
   const [firstWalletId, setFirstWalletId] = useState<string | null>(null)
   const router = useRouter()
@@ -284,7 +285,7 @@ export default function Dashboard() {
 
         {/* Main Content */}
         <main className="flex-1 lg:ml-0">
-          <div className="p-4 sm:p-6 space-y-4 pb-20 lg:pb-4">
+          <div className="p-4 sm:p-6 space-y-4 pb-24 lg:pb-4">
             {/* My Wallets Section */}
             <section className="card">
               <div className="p-4">
@@ -379,37 +380,65 @@ export default function Dashboard() {
           </div>
         </main>
 
-        {/* Bottom Navigation for Mobile */}
-        <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 px-4 py-2">
-          <div className="flex items-center justify-around">
-            <button className="flex flex-col items-center py-2 px-3 text-blue-600 dark:text-blue-400">
+        {/* Enhanced Bottom Navigation for Mobile */}
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 z-50 safe-area-pb">
+          <div className="flex items-center justify-around px-2 py-1">
+            <button 
+              onClick={() => setActiveNavItem('home')}
+              className={`flex flex-col items-center py-2 px-3 min-w-0 transition-colors ${
+                activeNavItem === 'home' 
+                  ? 'text-blue-600 dark:text-blue-400' 
+                  : 'text-gray-500 dark:text-gray-400'
+              }`}
+            >
               <svg className="w-6 h-6 mb-1" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M10.707 2.293a1 1 0 00-1.414 0l-9 9a1 1 0 001.414 1.414L2 12.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-4.586l.293.293a1 1 0 001.414-1.414l-9-9z" />
               </svg>
               <span className="text-xs font-medium">Home</span>
             </button>
             
-            <button className="flex flex-col items-center py-2 px-3 text-gray-500 dark:text-gray-400">
+            <button 
+              onClick={() => setActiveNavItem('transactions')}
+              className={`flex flex-col items-center py-2 px-3 min-w-0 transition-colors ${
+                activeNavItem === 'transactions' 
+                  ? 'text-blue-600 dark:text-blue-400' 
+                  : 'text-gray-500 dark:text-gray-400'
+              }`}
+            >
               <svg className="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
               <span className="text-xs font-medium">Transactions</span>
             </button>
 
-            {/* Central Add Button */}
+            {/* Central Add Button - Enhanced */}
             <button 
               onClick={() => setShowAddTransaction(true)}
-              className="flex items-center justify-center w-12 h-12 bg-blue-600 dark:bg-blue-500 text-white rounded-full shadow-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors"
+              className="flex items-center justify-center w-14 h-14 bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-500 dark:to-blue-600 text-white rounded-full shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 -mt-2"
             >
-              <Plus className="w-6 h-6" />
+              <Plus className="w-7 h-7" />
             </button>
 
-            <button className="flex flex-col items-center py-2 px-3 text-gray-500 dark:text-gray-400">
+            <button 
+              onClick={() => setActiveNavItem('budgets')}
+              className={`flex flex-col items-center py-2 px-3 min-w-0 transition-colors ${
+                activeNavItem === 'budgets' 
+                  ? 'text-blue-600 dark:text-blue-400' 
+                  : 'text-gray-500 dark:text-gray-400'
+              }`}
+            >
               <PieChart className="w-6 h-6 mb-1" />
               <span className="text-xs font-medium">Budgets</span>
             </button>
 
-            <button className="flex flex-col items-center py-2 px-3 text-gray-500 dark:text-gray-400">
+            <button 
+              onClick={() => setActiveNavItem('account')}
+              className={`flex flex-col items-center py-2 px-3 min-w-0 transition-colors ${
+                activeNavItem === 'account' 
+                  ? 'text-blue-600 dark:text-blue-400' 
+                  : 'text-gray-500 dark:text-gray-400'
+              }`}
+            >
               <UserIcon className="w-6 h-6 mb-1" />
               <span className="text-xs font-medium">Account</span>
             </button>
