@@ -1,7 +1,7 @@
 // MultiModal Agent
 // Converts non-text inputs (images, receipts, documents) to text for processing
 
-import { generateGeminiReply } from './gemini'
+// Lazy require generateGeminiReply where needed so tests can mock it
 
 export interface MultiModalResult {
   extractedText: string
@@ -207,7 +207,8 @@ Please provide the extracted text in a clear, structured format. If this appears
 
 If the image is unclear or text is hard to read, mention the confidence level for different parts.`
 
-    const response = await generateGeminiReply(visionPrompt, {
+  const { generateGeminiReply } = require('./gemini')
+  const response = await generateGeminiReply(visionPrompt, {
       userId,
       intent: 'image_text_extraction',
       imageUrl: imageUrl
@@ -256,7 +257,8 @@ Text to classify:
 
 Respond with just the category name.`
 
-    const response = await generateGeminiReply(classificationPrompt, {
+  const { generateGeminiReply } = require('./gemini')
+  const response = await generateGeminiReply(classificationPrompt, {
       userId,
       intent: 'content_classification'
     })
@@ -326,7 +328,8 @@ Extract the following information and format as JSON:
 If any information is not available, use null. Be accurate with numbers and dates.`
 
   try {
-    const response = await generateGeminiReply(receiptPrompt, {
+  const { generateGeminiReply } = require('./gemini')
+  const response = await generateGeminiReply(receiptPrompt, {
       userId,
       intent: 'receipt_data_extraction'
     })
@@ -368,7 +371,8 @@ Extract relevant financial information:
 Focus on numerical data and dates. Use null for unavailable information.`
 
   try {
-    const response = await generateGeminiReply(documentPrompt, {
+  const { generateGeminiReply } = require('./gemini')
+  const response = await generateGeminiReply(documentPrompt, {
       userId,
       intent: 'document_data_extraction'
     })
@@ -406,7 +410,8 @@ Format as:
 Focus on extracting numerical data points and their labels accurately.`
 
   try {
-    const response = await generateGeminiReply(tablePrompt, {
+  const { generateGeminiReply } = require('./gemini')
+  const response = await generateGeminiReply(tablePrompt, {
       userId,
       intent: 'table_data_extraction'
     })

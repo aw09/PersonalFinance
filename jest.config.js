@@ -18,7 +18,9 @@ const customJestConfig = {
   testPathIgnorePatterns: [
     '<rootDir>/__tests__/integration/',
     '<rootDir>/__tests__/e2e/',
-    '<rootDir>/node_modules/'
+  '<rootDir>/node_modules/',
+  '<rootDir>/__tests__/setup/',
+  '<rootDir>/__tests__/mocks/'
   ],
   collectCoverageFrom: [
     'src/**/*.{js,jsx,ts,tsx}',
@@ -36,9 +38,15 @@ const customJestConfig = {
       statements: 60,
     },
   },
-  moduleNameMapping: {
+  moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
+  '^@supabase/supabase-js$': '<rootDir>/__tests__/mocks/supabaseClientMock.cjs'
   },
+  // transformIgnorePatterns: By default node_modules are ignored. Some dependencies (like isows)
+  // ship ESM sources and must be transformed. Whitelist them here so Jest transforms them.
+  transformIgnorePatterns: [
+    'node_modules/(?!isows|@supabase/realtime-js|@supabase/supabase-js)'
+  ],
 }
 
 // createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async

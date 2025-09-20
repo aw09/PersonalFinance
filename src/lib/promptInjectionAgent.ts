@@ -1,7 +1,7 @@
 // Prompt Injection Detection Agent
 // Detects and prevents malicious prompt injection attempts
 
-import { generateGeminiReply } from './gemini'
+// Lazy require generateGeminiReply where used so tests can mock it
 
 export interface InjectionDetectionResult {
   isSafe: boolean
@@ -182,6 +182,7 @@ Respond with JSON in this format:
 Focus on legitimate personal finance queries vs potentially malicious attempts.`
 
   try {
+    const { generateGeminiReply } = require('./gemini')
     const response = await generateGeminiReply(analysisPrompt, {
       userId,
       intent: 'security_analysis'

@@ -6,7 +6,6 @@ import { selectTools, validateToolSelection } from './toolsSelectionAgent'
 import { enhanceWithKnowledge } from './ragAgent'
 import { processMultiModalInput } from './multiModalAgent'
 import { calculateConfidenceScore, formatConfidenceScore } from './confidenceAgent'
-import { generateGeminiReply } from './gemini'
 import { logLLMUsage } from './llmLogger'
 
 export interface OrchestrationRequest {
@@ -272,7 +271,7 @@ async function executeTools(
 }
 
 // Generate final response combining all information
-async function generateFinalResponse(
+export async function generateFinalResponse(
   enhancedPrompt: string,
   toolResults: any[],
   structuredData: any,
@@ -297,6 +296,7 @@ Instructions:
 Focus on being helpful and actionable while maintaining accuracy.`
 
   try {
+    const { generateGeminiReply } = require('./gemini')
     const response = await generateGeminiReply(responsePrompt, {
       userId,
       intent: 'final_response_generation'
@@ -310,7 +310,7 @@ Focus on being helpful and actionable while maintaining accuracy.`
 }
 
 // Generate general response for questions that don't require tools
-async function generateGeneralResponse(
+export async function generateGeneralResponse(
   enhancedPrompt: string,
   originalQuery: string,
   context: OrchestrationRequest['context'],
@@ -341,6 +341,7 @@ Instructions:
 Respond naturally as a knowledgeable personal finance assistant.`
 
   try {
+    const { generateGeminiReply } = require('./gemini')
     const response = await generateGeminiReply(generalResponsePrompt, {
       userId,
       intent: 'general_conversation'

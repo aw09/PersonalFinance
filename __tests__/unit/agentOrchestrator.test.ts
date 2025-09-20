@@ -40,6 +40,7 @@ const mockSelectTools = require('../../src/lib/toolsSelectionAgent').selectTools
 const mockCalculateConfidenceScore = require('../../src/lib/confidenceAgent').calculateConfidenceScore  
 const mockLogLLMUsage = require('../../src/lib/llmLogger').logLLMUsage
 const mockGenerateGeminiReply = require('../../src/lib/gemini').generateGeminiReply
+const { generateGeneralResponse } = require('../../src/lib/agentOrchestrator')
 
 describe('Agent Orchestrator', () => {
   const mockRequest = {
@@ -362,4 +363,56 @@ describe('Agent Orchestrator', () => {
       })
     })
   })
+// Tests for generateGeneralResponse
+
+
+describe('generateGeneralResponse', () => {
+  const enhancedPrompt = 'Enhanced budgeting guidance with examples'
+  const originalQuery = 'How should I budget my monthly expenses?'
+  const context = {
+    hasWallets: true,
+    hasTransactions: false,
+    hasBudgets: false,
+    hasCategories: false,
+    defaultCurrency: 'EUR',
+    experienceLevel: 'beginner'
+  }
+  const userId = 'test-user-id'
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('should call generateGeminiReply with a prompt containing the enhanced prompt, original query and context and return the LLM text', async () => {
+    mockGenerateGeminiReply.mockResolvedValueOnce({ text: 'Here is a helpful budgeting response.' })
+
+    const result = await generateGeneralResponse(enhancedPrompt, originalQuery, context, userId)
+
+    expect(result).toBe('Here is a helpful budgeting response.')
+    expect(mockGenerateGeminiReply).toHaveBeenCalledTimes(1)
+
+    const calledPrompt = mockGenerateGeminiReply.mock.calls[0][0] as string
+    const calledOptions = mockGenerateGeminiReply.mock.calls[0][1] as Record<string, any>
+
+    expect(calledPrompt).toEqual(expect.stringContaining(enhancedPrompt))
+    expect(calledPrompt).toEqual(expect.stringContaining(originalQuery))
+    expect(calledPrompt).toEqual(expect.stringContaining(`- Has wallets: ${context.hasWallets}`))
+    expect(calledPrompt).toEqual(expect.stringContaining(`- Has transactions: ${context.hasTransactions}`))
+    expect(calledPrompt).toEqual(expect.stringContaining(`- Default currency: ${context.defaultCurrency}`))
+
+    expect(calledOptions).toMatchObject({
+      userId,
+      intent: 'general_conversation'
+    })
+  })
+
+  it('should return the fallback message when the LLM throws an error', async () => {
+    mockGenerateGeminiReply.mockRejectedValueOnce(new Error('LLM failure'))
+
+    const result = await generateGeneralResponse(enhancedPrompt, originalQuery, context, userId)
+
+    expect(mockGenerateGeminiReply).toHaveBeenCalled()
+    expect(result).toBe("I'm here to help with your personal finance questions! Could you please rephrase your question so I can provide you with the best advice?")
+  })
+})
 })

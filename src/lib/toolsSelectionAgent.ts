@@ -1,8 +1,10 @@
 // Tools Selection Agent
 // Intelligently selects and orchestrates multiple tools for complex queries
 
-import { generateGeminiReply } from './gemini'
+// generateGeminiReply is required lazily inside functions to make it mockable in Jest tests
 import { FINANCIAL_TOOLS, findTool, validateToolArguments, ToolCall, ToolResult } from './aiTools'
+
+// generateGeminiReply will be lazy-required inside functions so tests can mock it
 
 export interface ToolSelectionResult {
   selectedTools: ToolCall[]
@@ -101,7 +103,9 @@ Consider:
 - Complex: Multiple tools, data aggregation, analysis (e.g., "compare my spending across categories and suggest budget adjustments")`
 
   try {
-    const response = await generateGeminiReply(analysisPrompt, {
+  // Lazy require so Jest can mock the module before it's loaded
+  const { generateGeminiReply } = require('./gemini')
+  const response = await generateGeminiReply(analysisPrompt, {
       userId,
       intent: 'query_analysis'
     })
@@ -172,7 +176,9 @@ Examples of queries that DO need tools:
 - "What's my current balance?"`
 
   try {
-    const response = await generateGeminiReply(selectionPrompt, {
+  // Lazy require so Jest can mock the module before it's loaded
+  const { generateGeminiReply } = require('./gemini')
+  const response = await generateGeminiReply(selectionPrompt, {
       userId,
       intent: 'tool_selection'
     })
@@ -426,11 +432,14 @@ function getFallbackToolSelection(userQuery: string, context: UserContext): Tool
     }
   }
 
-  // For general questions (how, what, why, explain, advice, help, etc.), return no tools
+  // For general questions (how, what, why, explain, advice, help, etc.), prefer no tools
+  // unless an explicit action verb is present (show/get/add/create)
   const generalQuestionWords = ['how', 'what', 'why', 'explain', 'advice', 'help', 'should', 'can', 'tell me', 'recommend']
+  const actionVerbs = ['show', 'get', 'list', 'add', 'create', 'update', 'delete']
   const isGeneralQuestion = generalQuestionWords.some(word => lowerQuery.includes(word))
-  
-  if (isGeneralQuestion && fallbackTools.length === 0) {
+  const hasActionVerb = actionVerbs.some(verb => lowerQuery.includes(verb))
+
+  if (isGeneralQuestion && !hasActionVerb) {
     return {
       selectedTools: [], // No tools needed for general questions
       executionPlan: [],
