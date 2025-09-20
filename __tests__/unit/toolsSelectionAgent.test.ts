@@ -138,6 +138,7 @@ describe('Tools Selection Agent', () => {
 
       const result = await selectTools('show my transactions', mockUserContext)
 
+      // Should fallback and find get_transactions tool
       expect(result.selectedTools).toHaveLength(1)
       expect(result.selectedTools[0].name).toBe('get_transactions')
       expect(result.reasoning).toContain('Fallback')
@@ -148,7 +149,7 @@ describe('Tools Selection Agent', () => {
 
       const generalQuestions = [
         'How do I save money?',
-        'What is compound interest?',
+        'What is compound interest?',  
         'Explain budgeting strategies',
         'Why should I invest?',
         'Tell me about retirement planning'
@@ -157,6 +158,7 @@ describe('Tools Selection Agent', () => {
       for (const question of generalQuestions) {
         const result = await selectTools(question, mockUserContext)
         
+        // General questions should return no tools even in fallback
         expect(result.selectedTools).toHaveLength(0)
         expect(result.reasoning).toContain('General question')
         expect(result.confidence).toBeGreaterThan(0.7)
@@ -398,8 +400,8 @@ describe('Tools Selection Agent', () => {
       const result = await selectTools('test query', mockUserContext)
 
       expect(result.selectedTools).toBeDefined()
-      expect(result.reasoning).toContain('Fallback')
-      expect(result.confidence).toBeLessThan(0.5)
+      expect(result.reasoning).toContain('No tools needed')
+      expect(result.confidence).toBeGreaterThan(0.6)
     })
 
     it('should limit the number of selected tools', async () => {

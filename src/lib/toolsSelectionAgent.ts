@@ -2,7 +2,7 @@
 // Intelligently selects and orchestrates multiple tools for complex queries
 
 // generateGeminiReply is required lazily inside functions to make it mockable in Jest tests
-import { FINANCIAL_TOOLS, findTool, validateToolArguments, ToolCall, ToolResult } from './aiTools'
+import { toolsRegistry, ToolCall, ToolResult } from './toolsRegistry'
 
 // generateGeminiReply will be lazy-required inside functions so tests can mock it
 
@@ -84,7 +84,7 @@ User Context:
 - Default currency: ${context.defaultCurrency || 'Unknown'}
 
 Available Tools:
-${FINANCIAL_TOOLS.map(tool => `- ${tool.name}: ${tool.description}`).join('\n')}
+${toolsRegistry.getAllTools().map(tool => `- ${tool.name}: ${tool.description}`).join('\n')}
 
 Analyze and respond with JSON:
 {
@@ -131,11 +131,9 @@ User Query: "${userQuery}"
 Query Analysis: ${JSON.stringify(analysis, null, 2)}
 
 Available Tools:
-${FINANCIAL_TOOLS.map(tool => 
+${toolsRegistry.getAllTools().map(tool => 
   `${tool.name}: ${tool.description}
-  Parameters: ${Object.entries(tool.parameters.properties).map(([name, prop]) => 
-    `${name} (${prop.type}): ${prop.description}`
-  ).join(', ')}`
+  Parameters: ${tool.getParameterDescription()}`
 ).join('\n\n')}
 
 User Context: ${JSON.stringify(context, null, 2)}
@@ -211,7 +209,7 @@ function optimizeToolSelection(
 
   // Remove invalid tools
   optimizedTools = optimizedTools.filter(toolCall => {
-    const tool = findTool(toolCall.name)
+    const tool = toolsRegistry.getTool(toolCall.name)
     if (!tool) {
       console.warn(`Tool not found: ${toolCall.name}`)
       return false
@@ -221,7 +219,7 @@ function optimizeToolSelection(
 
   // Validate arguments
   optimizedTools = optimizedTools.map(toolCall => {
-    const tool = findTool(toolCall.name)
+    const tool = toolsRegistry.getTool(toolCall.name)
     if (!tool) return toolCall
 
     // Fill in default values based on context
@@ -279,17 +277,17 @@ function fillDefaultArguments(
   const filledArgs = { ...args }
 
   // Add default currency if not specified
-  if (tool.parameters.properties.currency && !filledArgs.currency && context.defaultCurrency) {
+  if (tool.parameters && tool.parameters.properties?.currency && !filledArgs.currency && context.defaultCurrency) {
     filledArgs.currency = context.defaultCurrency
   }
 
   // Add default wallet if wallet operations and not specified
-  if (tool.parameters.properties.wallet_name && !filledArgs.wallet_name && context.hasWallets) {
+  if (tool.parameters && tool.parameters.properties?.wallet_name && !filledArgs.wallet_name && context.hasWallets) {
     filledArgs.wallet_name = 'main' // Default to main wallet
   }
 
   // Add default limits for get operations
-  if (tool.parameters.properties.limit && !filledArgs.limit) {
+  if (tool.parameters && tool.parameters.properties?.limit && !filledArgs.limit) {
     if (tool.name.includes('transaction')) {
       filledArgs.limit = 10
     } else {
@@ -411,7 +409,11 @@ function getFallbackToolSelection(userQuery: string, context: UserContext): Tool
     })
   }
 
-  if (lowerQuery.includes('show') || lowerQuery.includes('get') || lowerQuery.includes('list')) {
+  // Only add retrieval tools for explicit show/get/list requests
+  const retrievalActionVerbs = ['show', 'get', 'list', 'display']
+  const hasRetrievalAction = retrievalActionVerbs.some(verb => lowerQuery.includes(verb))
+
+  if (hasRetrievalAction) {
     if (lowerQuery.includes('transaction')) {
       fallbackTools.push({ name: 'get_transactions', arguments: { limit: 10 } })
     }
@@ -434,12 +436,12 @@ function getFallbackToolSelection(userQuery: string, context: UserContext): Tool
 
   // For general questions (how, what, why, explain, advice, help, etc.), prefer no tools
   // unless an explicit action verb is present (show/get/add/create)
-  const generalQuestionWords = ['how', 'what', 'why', 'explain', 'advice', 'help', 'should', 'can', 'tell me', 'recommend']
-  const actionVerbs = ['show', 'get', 'list', 'add', 'create', 'update', 'delete']
-  const isGeneralQuestion = generalQuestionWords.some(word => lowerQuery.includes(word))
-  const hasActionVerb = actionVerbs.some(verb => lowerQuery.includes(verb))
+  const questionWords = ['how', 'what', 'why', 'explain', 'advice', 'help', 'should', 'can', 'tell me', 'recommend']
+  const actionVerbs = ['show', 'get', 'list', 'add', 'create', 'update', 'delete', 'display']
+  const isQuestionBased = questionWords.some(word => lowerQuery.includes(word))
+  const hasExplicitAction = actionVerbs.some(verb => lowerQuery.includes(verb))
 
-  if (isGeneralQuestion && !hasActionVerb) {
+  if (isQuestionBased && !hasExplicitAction) {
     return {
       selectedTools: [], // No tools needed for general questions
       executionPlan: [],
@@ -493,8 +495,8 @@ interface QueryAnalysis {
 // Utility function to validate selected tools
 export function validateToolSelection(selection: ToolSelectionResult): boolean {
   return selection.selectedTools.every(toolCall => {
-    const tool = findTool(toolCall.name)
-    return tool && validateToolArguments(tool, toolCall.arguments)
+    const tool = toolsRegistry.getTool(toolCall.name)
+    return tool && tool.validateArguments(toolCall.arguments)
   })
 }
 
