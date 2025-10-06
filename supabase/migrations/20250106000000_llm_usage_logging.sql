@@ -2,11 +2,11 @@
 -- Create tables to track LLM API usage, prompts, and responses
 
 -- Enable required extensions
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- Create llm_usage_logs table to track all LLM API calls
 CREATE TABLE IF NOT EXISTS llm_usage_logs (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
   telegram_user_id BIGINT, -- For telegram bot interactions
   provider TEXT NOT NULL DEFAULT 'gemini', -- gemini, openai, claude, etc.
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS llm_usage_logs (
 
 -- Create llm_conversation_sessions table to track multi-turn conversations
 CREATE TABLE IF NOT EXISTS llm_conversation_sessions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
   telegram_user_id BIGINT,
   session_type TEXT CHECK (session_type IN ('telegram', 'web', 'api')) DEFAULT 'telegram',

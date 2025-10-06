@@ -2,11 +2,11 @@
 -- Add receipt storage and processing capabilities
 
 -- Enable required extensions
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- Create receipt_images table to store receipt metadata and Supabase storage paths
 CREATE TABLE IF NOT EXISTS receipt_images (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
   transaction_id UUID REFERENCES transactions(id) ON DELETE CASCADE,
   storage_path TEXT NOT NULL, -- Path in Supabase storage
