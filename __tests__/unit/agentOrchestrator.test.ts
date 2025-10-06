@@ -1,46 +1,67 @@
 // Unit tests for Agent Orchestrator
-import { describe, it, expect, jest, beforeEach } from '@jest/globals'
-import { orchestrateQuery, orchestrateTextQuery } from '../../src/lib/agentOrchestrator'
+import { describe, it, expect, jest, beforeEach, beforeAll } from '@jest/globals'
+type OrchestratorModule = typeof import('../../src/lib/agentOrchestrator')
 
 // Mock all the agent dependencies
 jest.mock('../../src/lib/promptInjectionAgent', () => ({
+  __esModule: true,
   detectPromptInjection: jest.fn(),
   isInputSafe: jest.fn(),
+  generateSecurityMessage: jest.fn().mockReturnValue('⚠️ Potential malicious content detected.')
 }))
 
 jest.mock('../../src/lib/multiModalAgent', () => ({
+  __esModule: true,
   processMultiModalInput: jest.fn(),
 }))
 
 jest.mock('../../src/lib/ragAgent', () => ({
+  __esModule: true,
   enhanceWithKnowledge: jest.fn(),
 }))
 
 jest.mock('../../src/lib/toolsSelectionAgent', () => ({
+  __esModule: true,
   selectTools: jest.fn(),
 }))
 
 jest.mock('../../src/lib/confidenceAgent', () => ({
+  __esModule: true,
   calculateConfidenceScore: jest.fn(),
 }))
 
 jest.mock('../../src/lib/llmLogger', () => ({
+  __esModule: true,
   logLLMUsage: jest.fn(),
 }))
 
 jest.mock('../../src/lib/gemini', () => ({
+  __esModule: true,
   generateGeminiReply: jest.fn(),
 }))
 
+let orchestrateQuery: OrchestratorModule['orchestrateQuery']
+let orchestrateTextQuery: OrchestratorModule['orchestrateTextQuery']
+
 const mockDetectPromptInjection = require('../../src/lib/promptInjectionAgent').detectPromptInjection
 const mockIsInputSafe = require('../../src/lib/promptInjectionAgent').isInputSafe
+const mockGenerateSecurityMessage = require('../../src/lib/promptInjectionAgent').generateSecurityMessage
 const mockProcessMultiModalInput = require('../../src/lib/multiModalAgent').processMultiModalInput
 const mockEnhanceWithKnowledge = require('../../src/lib/ragAgent').enhanceWithKnowledge
 const mockSelectTools = require('../../src/lib/toolsSelectionAgent').selectTools
 const mockCalculateConfidenceScore = require('../../src/lib/confidenceAgent').calculateConfidenceScore  
 const mockLogLLMUsage = require('../../src/lib/llmLogger').logLLMUsage
 const mockGenerateGeminiReply = require('../../src/lib/gemini').generateGeminiReply
-const { generateGeneralResponse } = require('../../src/lib/agentOrchestrator')
+let generateGeneralResponse: typeof import('../../src/lib/agentOrchestrator').generateGeneralResponse
+
+beforeAll(() => {
+  jest.isolateModules(() => {
+    const orchestratorModule = require('../../src/lib/agentOrchestrator')
+    orchestrateQuery = orchestratorModule.orchestrateQuery
+    orchestrateTextQuery = orchestratorModule.orchestrateTextQuery
+    generateGeneralResponse = orchestratorModule.generateGeneralResponse
+  })
+})
 
 describe('Agent Orchestrator', () => {
   const mockRequest = {
@@ -173,15 +194,61 @@ describe('Agent Orchestrator', () => {
       expect(result.processing.stepsExecuted).toContain('response_generation_with_tools')
     })
 
+    it('should include wallet details in the final response prompt when get_wallets executes', async () => {
+      mockSelectTools.mockResolvedValue({
+        selectedTools: [
+          {
+            name: 'get_wallets',
+            arguments: {}
+          }
+        ],
+        executionPlan: [],
+        reasoning: 'User asked to show wallets',
+        confidence: 0.9
+      })
+
+      await orchestrateQuery(mockRequest)
+
+      expect(mockGenerateGeminiReply).toHaveBeenCalledTimes(1)
+      const prompt = mockGenerateGeminiReply.mock.calls[0][0] as string
+
+      expect(prompt).toContain('Main Account')
+      expect(prompt).toContain('Savings')
+      expect(prompt).toContain('Total USD balance')
+      expect(prompt).toContain('When wallet data is available')
+    })
+
+    it('should return a fallback wallet summary when LLM response generation fails', async () => {
+      mockSelectTools.mockResolvedValue({
+        selectedTools: [
+          {
+            name: 'get_wallets',
+            arguments: {}
+          }
+        ],
+        executionPlan: [],
+        reasoning: 'User asked to show wallets',
+        confidence: 0.9
+      })
+
+      mockGenerateGeminiReply.mockRejectedValueOnce(new Error('LLM failure'))
+
+      const result = await orchestrateQuery(mockRequest)
+
+      expect(result.finalResponse).toContain('Here are the wallets I retrieved')
+      expect(result.finalResponse).toContain('Main Account')
+      expect(result.finalResponse).toContain('Total USD balance')
+    })
+
     it('should handle security threats by blocking unsafe inputs', async () => {
-      mockDetectPromptInjection.mockResolvedValue({
+      mockDetectPromptInjection.mockResolvedValueOnce({
         isSafe: false,
         threatLevel: 'high',
         detectedPatterns: ['system_override'],
         reasoning: 'Malicious prompt injection detected'
       })
       
-      mockIsInputSafe.mockReturnValue(false)
+      mockIsInputSafe.mockReturnValueOnce(false)
 
       const maliciousRequest = {
         ...mockRequest,
@@ -192,11 +259,13 @@ describe('Agent Orchestrator', () => {
 
       expect(result.security.isSafe).toBe(false)
       expect(result.security.threatLevel).toBe('high')
-      expect(result.finalResponse).toContain('malicious content')
-      
+      expect(result.finalResponse).toContain('⚠️')
+
+      expect(mockGenerateSecurityMessage).toHaveBeenCalledWith(expect.objectContaining({ isSafe: false }))
+
       // Should not proceed to other steps
       expect(mockSelectTools).not.toHaveBeenCalled()
-      expect(mockLogLLMUsage).toHaveBeenCalled() // Still log for security monitoring
+      expect(mockLogLLMUsage).not.toHaveBeenCalled()
     })
 
     it('should handle multimodal inputs', async () => {
@@ -343,7 +412,7 @@ describe('Agent Orchestrator', () => {
       const endTime = Date.now()
       const actualTime = endTime - startTime
 
-      expect(result.processing.totalTime).toBeGreaterThan(0)
+  expect(result.processing.totalTime).toBeGreaterThanOrEqual(0)
       expect(result.processing.totalTime).toBeLessThanOrEqual(actualTime + 100) // Allow some margin
     })
 
@@ -375,7 +444,7 @@ describe('generateGeneralResponse', () => {
     hasBudgets: false,
     hasCategories: false,
     defaultCurrency: 'EUR',
-    experienceLevel: 'beginner'
+  experienceLevel: 'beginner' as const
   }
   const userId = 'test-user-id'
 

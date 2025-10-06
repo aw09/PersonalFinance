@@ -7,6 +7,8 @@ import { enhanceWithKnowledge } from './ragAgent'
 import { processMultiModalInput } from './multiModalAgent'
 import { calculateConfidenceScore, formatConfidenceScore } from './confidenceAgent'
 import { logLLMUsage } from './llmLogger'
+import { toolsRegistry } from './toolsRegistry'
+import type { ToolResult } from './tools/BaseTool'
 
 export interface OrchestrationRequest {
   userInput: string | File | ArrayBuffer
@@ -52,6 +54,11 @@ export interface OrchestrationResult {
     structuredData?: any
     toolResults?: any[]
   }
+}
+
+type ExecutedToolResult = ToolResult & {
+  tool: string
+  arguments: Record<string, any>
 }
 
 // Main orchestration function
@@ -155,8 +162,8 @@ export async function orchestrateQuery(
     toolsUsed.push(...toolSelection.selectedTools.map(tool => tool.name))
 
     // Step 5: Tool Execution and Response Generation
-    let finalResponse: string
-    let toolResults: any[] = []
+  let finalResponse: string
+  let toolResults: ExecutedToolResult[] = []
 
     if (toolSelection.selectedTools.length > 0) {
       // Execute tools and generate response based on tool results
@@ -260,28 +267,67 @@ export async function orchestrateQuery(
 async function executeTools(
   toolCalls: any[],
   request: OrchestrationRequest
-): Promise<Array<{ success: boolean; data?: any; error?: string }>> {
-  // This would integrate with the existing tool execution logic from geminiAgentV2
-  // For now, return placeholder results
-  return toolCalls.map(tool => ({
-    success: true,
-    data: { tool: tool.name, executed: true },
-    message: `Executed ${tool.name} successfully`
-  }))
+): Promise<ExecutedToolResult[]> {
+  const context = {
+    userId: request.userId,
+    telegramUserId: request.telegramUserId,
+    userContext: request.context
+  }
+
+  const results: ExecutedToolResult[] = []
+
+  for (const toolCall of toolCalls) {
+    const args = toolCall.arguments || {}
+
+    try {
+      const execution = await toolsRegistry.executeTool(toolCall.name, args, context)
+      results.push({
+        tool: toolCall.name,
+        arguments: args,
+        success: execution.success,
+        data: execution.data,
+        message: execution.message,
+        error: execution.error
+      })
+    } catch (error) {
+      const errMessage = error instanceof Error ? error.message : 'Unknown error'
+      results.push({
+        tool: toolCall.name,
+        arguments: args,
+        success: false,
+        error: errMessage
+      })
+    }
+  }
+
+  return results
 }
 
 // Generate final response combining all information
 export async function generateFinalResponse(
   enhancedPrompt: string,
-  toolResults: any[],
+  toolResults: ExecutedToolResult[],
   structuredData: any,
   userId: string
 ): Promise<string> {
+  const toolResultsSummary = formatToolResultsForPrompt(toolResults)
+  const sanitizedToolResults = toolResults.map(result => ({
+    tool: result.tool,
+    success: result.success,
+    message: result.message,
+    error: result.error,
+    data: result.data
+  }))
+
   const responsePrompt = `You are a helpful personal finance assistant. Based on the enhanced prompt and tool execution results, provide a comprehensive and friendly response.
 
 Enhanced Prompt: ${enhancedPrompt}
 
-Tool Results: ${JSON.stringify(toolResults, null, 2)}
+Tool Results Summary:
+${toolResultsSummary}
+
+Raw Tool Results JSON:
+${JSON.stringify(sanitizedToolResults, null, 2)}
 
 ${structuredData ? `Structured Data Extracted: ${JSON.stringify(structuredData, null, 2)}` : ''}
 
@@ -292,6 +338,7 @@ Instructions:
 4. Offer relevant financial advice or next steps
 5. Be encouraging and supportive
 6. Use a friendly, conversational tone
+7. When wallet data is available, list each wallet with its name, currency, and balance using bullet points, and mention total balances when provided.
 
 Focus on being helpful and actionable while maintaining accuracy.`
 
@@ -305,7 +352,7 @@ Focus on being helpful and actionable while maintaining accuracy.`
     return response.text
   } catch (error) {
     console.error('Final response generation error:', error)
-    return 'I processed your request successfully, but encountered an issue generating the response. Please try asking your question again.'
+    return buildFallbackResponse(toolResults, structuredData)
   }
 }
 
@@ -398,6 +445,73 @@ export async function orchestrateMultiModalQuery(
   }
 
   return await orchestrateQuery(request)
+}
+
+function formatToolResultsForPrompt(toolResults: ExecutedToolResult[]): string {
+  if (!toolResults || toolResults.length === 0) {
+    return 'No tools were executed.'
+  }
+
+  return toolResults.map(result => {
+    if (!result.success) {
+      return `• ${result.tool} failed: ${result.error || 'Unknown error'}`
+    }
+
+    if (result.tool === 'get_wallets' && result.data?.wallets) {
+      const wallets = Array.isArray(result.data.wallets) ? result.data.wallets : []
+      const walletLines = wallets.slice(0, 10).map((wallet: any) => {
+        const balance = typeof wallet.balance === 'number'
+          ? wallet.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          : wallet.balance
+        return `  - ${wallet.name} — ${wallet.currency || 'N/A'} ${balance}`
+      }).join('\n')
+
+      const total = typeof result.data.total_balance_usd === 'number'
+        ? ` Total USD balance: $${result.data.total_balance_usd.toFixed(2)}`
+        : ''
+
+      return `• ${result.tool} succeeded. Wallets:\n${walletLines}${total}`
+    }
+
+    return `• ${result.tool} succeeded: ${result.message || 'Operation completed successfully.'}`
+  }).join('\n')
+}
+
+function buildFallbackResponse(toolResults: ExecutedToolResult[], structuredData: any): string {
+  const sections: string[] = []
+
+  const walletResult = toolResults.find(result => result.tool === 'get_wallets' && result.success && result.data?.wallets?.length)
+  if (walletResult) {
+    const wallets = walletResult.data.wallets as any[]
+    const walletLines = wallets.map(wallet => {
+      const balance = typeof wallet.balance === 'number'
+        ? wallet.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : wallet.balance
+      return `• ${wallet.name} — ${wallet.currency || 'N/A'} ${balance}`
+    }).join('\n')
+
+    let walletSection = `Here are the wallets I retrieved:\n${walletLines}`
+
+    if (typeof walletResult.data.total_wallets === 'number') {
+      walletSection += `\nTotal wallets: ${walletResult.data.total_wallets}`
+    }
+
+    if (typeof walletResult.data.total_balance_usd === 'number') {
+      walletSection += `\nTotal USD balance: $${walletResult.data.total_balance_usd.toFixed(2)}`
+    }
+
+    sections.push(walletSection)
+  }
+
+  if (structuredData) {
+    sections.push(`I also processed structured data: ${JSON.stringify(structuredData)}`)
+  }
+
+  if (sections.length === 0) {
+    sections.push('I executed the requested tools successfully but encountered an issue generating a detailed response. Please try rephrasing your request if you need more information.')
+  }
+
+  return sections.join('\n\n')
 }
 
 // Health check for all agents
