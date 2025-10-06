@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Database } from '@/types/database'
 
@@ -25,7 +25,7 @@ export default function CreateBudgetModal({ isOpen, onClose, onBudgetCreated }: 
   const [endDate, setEndDate] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       
@@ -37,9 +37,10 @@ export default function CreateBudgetModal({ isOpen, onClose, onBudgetCreated }: 
       })
       if (walletsResponse.ok) {
         const walletsData = await walletsResponse.json()
-        setWallets(walletsData.wallets || [])
-        if (walletsData.wallets?.length > 0 && !walletId) {
-          setWalletId(walletsData.wallets[0].id)
+        const walletsList = walletsData.wallets || []
+        setWallets(walletsList)
+        if (walletsList.length > 0) {
+          setWalletId(prev => prev || walletsList[0].id)
         }
       }
 
@@ -57,13 +58,13 @@ export default function CreateBudgetModal({ isOpen, onClose, onBudgetCreated }: 
     } catch (error) {
       console.error('Error fetching data:', error)
     }
-  }
+  }, [])
 
   useEffect(() => {
     if (isOpen) {
       fetchData()
     }
-  }, [isOpen])
+  }, [isOpen, fetchData])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

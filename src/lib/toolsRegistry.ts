@@ -126,7 +126,7 @@ class ToolsRegistry {
       }
 
       // Validate each tool
-      for (const [name, tool] of this.tools) {
+      this.tools.forEach((tool, name) => {
         if (!tool.name) {
           issues.push(`Tool ${name} missing name property`)
         }
@@ -136,7 +136,7 @@ class ToolsRegistry {
         if (!tool.parameters) {
           issues.push(`Tool ${name} missing parameters`)
         }
-      }
+      })
 
       return {
         healthy: issues.length === 0,

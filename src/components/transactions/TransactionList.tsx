@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 
 interface Transaction {
@@ -30,13 +30,13 @@ export default function TransactionList({ limit = 10, walletId, onAddTransaction
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
 
-  const fetchTransactions = async () => {
+  const fetchTransactions = useCallback(async () => {
+    setLoading(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
       
       if (!session?.access_token) {
         setTransactions([])
-        setLoading(false)
         return
       }
 
@@ -61,11 +61,11 @@ export default function TransactionList({ limit = 10, walletId, onAddTransaction
     } finally {
       setLoading(false)
     }
-  }
+  }, [limit, walletId])
 
   useEffect(() => {
     fetchTransactions()
-  }, [limit, walletId])
+  }, [fetchTransactions])
 
   const formatCurrency = (amount: number, currency: string) => {
     return new Intl.NumberFormat('en-US', {

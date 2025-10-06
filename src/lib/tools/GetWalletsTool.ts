@@ -57,7 +57,7 @@ export class GetWalletsTool extends BaseTool {
           wallets: mockWallets,
           total_wallets: mockWallets.length,
           total_balance_usd: totalBalance,
-          currencies: [...new Set(mockWallets.map(w => w.currency))]
+          currencies: Array.from(new Set(mockWallets.map(w => w.currency)))
         },
         `Retrieved ${mockWallets.length} wallet${mockWallets.length !== 1 ? 's' : ''} with total USD balance: $${totalBalance.toFixed(2)}`
       )
