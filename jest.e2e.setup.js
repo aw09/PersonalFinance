@@ -1,5 +1,11 @@
 // E2E test setup
-require('dotenv').config({ path: '.env.test' })
+const dotenv = require('dotenv')
+
+// Load environment variables in priority order without overriding existing values
+dotenv.config()
+dotenv.config({ path: '.env.local', override: false })
+dotenv.config({ path: '.env', override: false })
+dotenv.config({ path: '.env.test', override: false })
 
 // Global E2E test utilities
 global.e2eUtils = {

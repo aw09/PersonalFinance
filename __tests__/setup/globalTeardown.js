@@ -5,6 +5,10 @@ module.exports = async () => {
   console.log('Tearing down test environment...')
   
   try {
+    if (process.env.SKIP_SUPABASE === '1') {
+      console.log('SKIP_SUPABASE=1 detected, skipping Supabase teardown.')
+      return
+    }
     // Clean up test data if needed
     console.log('Cleaning up test data...')
     

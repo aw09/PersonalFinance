@@ -155,6 +155,20 @@ export async function generateGeminiReply(
         const contents = data?.results?.[0]?.content?.payload ?? data?.outputs ?? data?.contents ?? data
         let text = ''
 
+        // Primary Gemini response shape (candidates array)
+        if (Array.isArray(data?.candidates)) {
+          for (const candidate of data.candidates) {
+            const parts = candidate?.content?.parts
+            if (Array.isArray(parts)) {
+              const candidateText = parts.map((p: any) => p?.text || '').join('')
+              if (candidateText?.trim()) {
+                text += candidateText
+                break
+              }
+            }
+          }
+        }
+
         // Search known shapes
         if (Array.isArray(data?.results)) {
           // v1beta2 may return results with content
@@ -180,13 +194,40 @@ export async function generateGeminiReply(
 
         if (!text && typeof data?.text === 'string') text = data.text
 
+        const blockReason = data?.promptFeedback?.blockReason || data?.candidates?.[0]?.finishReason
+        if (!text && blockReason) {
+          const blockMessage = `⚠️ Gemini could not return an answer (reason: ${blockReason}). Please rephrase your request.`
+          await logLLMUsage({
+            userId: options.userId,
+            telegramUserId: options.telegramUserId,
+            provider: 'gemini',
+            model: 'gemini-2.0-flash',
+            prompt,
+            response: blockMessage,
+            status: 'error',
+            responseTimeMs: responseTime,
+            sessionId: options.sessionId,
+            intentDetected: options.intent,
+            errorMessage: blockReason,
+            metadata: {
+              promptFeedback: data?.promptFeedback,
+              safetyRatings: data?.candidates?.[0]?.safetyRatings
+            }
+          })
+          return { text: blockMessage }
+        }
+
         const finalText = (text || 'Sorry, I could not generate a reply right now.').trim()
 
         // Extract token usage if available
-        const usageMetadata = data?.usageMetadata
-        const promptTokens = usageMetadata?.promptTokenCount
-        const completionTokens = usageMetadata?.candidatesTokenCount
-        const totalTokens = usageMetadata?.totalTokenCount
+        const usageMetadata = data?.usageMetadata || data?.candidates?.[0]?.tokenCountMap
+        const promptTokens = usageMetadata?.promptTokenCount || usageMetadata?.inputTokens
+        const completionTokens = usageMetadata?.candidatesTokenCount || usageMetadata?.outputTokens
+        const totalTokens = usageMetadata?.totalTokenCount || (
+          typeof promptTokens === 'number' && typeof completionTokens === 'number'
+            ? promptTokens + completionTokens
+            : undefined
+        )
 
         // Estimate tokens if not provided (rough approximation)
         const estimatedPromptTokens = promptTokens || Math.ceil(prompt.length / 4)

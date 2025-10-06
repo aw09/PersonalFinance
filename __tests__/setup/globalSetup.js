@@ -3,6 +3,11 @@ const { execSync } = require('child_process')
 
 module.exports = async () => {
   console.log('Setting up test environment...')
+
+  if (process.env.SKIP_SUPABASE === '1') {
+    console.log('SKIP_SUPABASE=1 detected, skipping Supabase startup and migrations.')
+    return
+  }
   
   try {
     // Check if Supabase is running

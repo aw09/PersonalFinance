@@ -9,7 +9,7 @@ module.exports = {
   testMatch: [
     '<rootDir>/__tests__/e2e/**/*.{js,jsx,ts,tsx}',
   ],
-  moduleNameMapping: pathsToModuleNameMapper(compilerOptions.paths || {}, {
+  moduleNameMapper: pathsToModuleNameMapper(compilerOptions.paths || {}, {
     prefix: '<rootDir>/',
   }),
   globalSetup: '<rootDir>/__tests__/setup/globalSetup.js',
