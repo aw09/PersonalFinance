@@ -41,7 +41,8 @@ import {
   getMainMenuKeyboard
 } from '@/lib/telegramUI'
 import { generateGeminiReply } from '@/lib/gemini'
-import { handleGeminiTelegramQuery } from '@/lib/geminiAgent'
+// import { handleGeminiTelegramQuery } from '@/lib/geminiAgent'
+import { handleAdvancedTelegramQuery } from '@/lib/geminiAgentV3'
 
 // Telegram Bot webhook handler
 export async function POST(request: NextRequest) {
@@ -141,7 +142,8 @@ async function handleMessage(message: any, botToken: string) {
   // If GEMINI_API_KEY is present, forward unknown messages to the LLM for a helpful reply.
   if (process.env.GEMINI_API_KEY) {
     try {
-      const reply = await handleGeminiTelegramQuery(telegramUserId, chatId, text || '')
+      // const reply = await handleGeminiTelegramQuery(telegramUserId, chatId, text || '')
+      const reply = await handleAdvancedTelegramQuery(telegramUserId, chatId, text, { includeConfidence: true, enableRAG: true })
       // Don't always show main menu - let the LLM decide based on response type
       const shouldShowMenu = reply.includes('Use /menu') || reply.includes('couldn\'t map your request')
       await sendTelegramMessage(botToken, chatId, reply, shouldShowMenu ? mainMenuKeyboard : undefined)
@@ -1043,7 +1045,22 @@ async function sendTelegramMessage(
       console.log('Successfully sent Telegram message')
     }
   } catch (error) {
-    console.error('Error sending Telegram message (this may be expected in sandboxed environments):', error)
+    // Provide more detailed error logging while acknowledging sandboxed environment limitations
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        console.error('Telegram message send timeout (expected in sandboxed environments)')
+      } else if (error.message.includes('ETIMEDOUT') || error.message.includes('fetch failed')) {
+        console.error('Telegram API connection timeout (expected in sandboxed environments):', error.message)
+      } else {
+        console.error('Error sending Telegram message:', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        })
+      }
+    } else {
+      console.error('Unknown error sending Telegram message:', error)
+    }
   }
 }
 
@@ -1082,7 +1099,22 @@ async function editTelegramMessage(
       console.log('Successfully edited Telegram message')
     }
   } catch (error) {
-    console.error('Error editing Telegram message (this may be expected in sandboxed environments):', error)
+    // Provide more detailed error logging while acknowledging sandboxed environment limitations
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        console.error('Telegram message edit timeout (expected in sandboxed environments)')
+      } else if (error.message.includes('ETIMEDOUT') || error.message.includes('fetch failed')) {
+        console.error('Telegram API connection timeout for edit (expected in sandboxed environments):', error.message)
+      } else {
+        console.error('Error editing Telegram message:', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        })
+      }
+    } else {
+      console.error('Unknown error editing Telegram message:', error)
+    }
   }
 }
 

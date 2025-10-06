@@ -212,7 +212,7 @@ export const accountNotLinkedMessage = `
 Your Telegram account is not linked to a Personal Finance account yet.
 
 To get started:
-1. Create an account at [Your Website]
+1. Create an account at ${process.env.NEXT_PUBLIC_SITE_URL || 'https://personalfinance-production.up.railway.app'}
 2. Click "Link Account" in the main menu
 3. Follow the instructions to connect your accounts
 

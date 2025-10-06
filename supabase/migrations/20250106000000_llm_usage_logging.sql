@@ -1,6 +1,9 @@
 -- LLM Usage Logging Migration
 -- Create tables to track LLM API usage, prompts, and responses
 
+-- Enable required extensions
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 -- Create llm_usage_logs table to track all LLM API calls
 CREATE TABLE IF NOT EXISTS llm_usage_logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

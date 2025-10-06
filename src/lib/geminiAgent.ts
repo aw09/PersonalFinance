@@ -6,6 +6,7 @@ import {
   getTelegramUserTransactions,
   getTelegramUserWallets,
   createTelegramUserWallet,
+  updateTelegramUserWallet,
   getTelegramUserCategories,
   createTelegramUserCategory,
   getTelegramUserBudgets,
@@ -251,13 +252,15 @@ export async function handleGeminiTelegramQuery(
 
   // For transaction-related queries, use the LLM for intent detection
   const system = `You are a personal finance assistant for a Telegram bot. When given a user's message, output a JSON object with keys:
-- intent: one of [create_transaction, list_transactions, create_wallet, list_wallets, create_category, list_categories, create_budget, list_budgets, generate_report, general_question, unknown]
-- params: object with typed parameters required for the intent (e.g. amount, description, wallet_name, wallet_id, category_name, period)
+- intent: one of [create_transaction, list_transactions, create_wallet, list_wallets, update_wallet, create_category, list_categories, create_budget, list_budgets, generate_report, general_question, unknown]
+- params: object with typed parameters required for the intent (e.g. amount, description, wallet_name, wallet_id, new_wallet_name, new_currency, category_name, period)
 - reply: a short human-friendly message that the bot can send immediately
 - shouldShowMenu: boolean (true if user should see menu options, false for informational responses)
 
-For financial actions (create/list), set shouldShowMenu to false since the user has a specific task.
+For financial actions (create/list/update), set shouldShowMenu to false since the user has a specific task.
 For general questions or unknown intents, set shouldShowMenu to true to guide the user.
+
+For update_wallet intent, expect params like: wallet_name (current name) or wallet_id, new_wallet_name (optional), new_currency (optional).
 
 Only output valid JSON. If you cannot map intent, use intent: "unknown" and provide reply with a helpful suggestion.`
 
@@ -376,6 +379,50 @@ Only output valid JSON. If you cannot map intent, use intent: "unknown" and prov
           result = out
         }
         actionTaken = 'wallets_listed'
+        break
+      }
+
+      case 'update_wallet': {
+        const p = intentObj.params || {}
+        const currentName = p.wallet_name || p.current_name
+        const newName = p.new_wallet_name || p.new_name
+        const newCurrency = p.new_currency
+        
+        if (!currentName) {
+          result = '❌ Please specify which wallet to update.'
+          break
+        }
+
+        // Get user's wallets to find the one to update
+        const wallets = await getTelegramUserWallets(telegramUserId)
+        const targetWallet = wallets?.find((w: any) => 
+          w.name.toLowerCase() === currentName.toLowerCase()
+        )
+
+        if (!targetWallet) {
+          result = `❌ Wallet "${currentName}" not found.`
+          break
+        }
+
+        // Import updateWallet function
+        
+        try {
+          const updates: any = {}
+          if (newName) updates.name = newName
+          if (newCurrency) updates.currency = newCurrency.toUpperCase()
+          
+          const updatedWallet = await updateTelegramUserWallet(
+            telegramUserId, 
+            targetWallet.id, 
+            updates
+          )
+          
+          actionTaken = 'wallet_updated'
+          result = `✅ Wallet updated successfully!\n${updatedWallet.name} (${updatedWallet.currency})`
+        } catch (error) {
+          console.error('Error updating wallet:', error)
+          result = '❌ Failed to update wallet. Please try again.'
+        }
         break
       }
 

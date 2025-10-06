@@ -15,6 +15,7 @@ export async function generateGeminiReply(
     telegramUserId?: number
     sessionId?: string
     intent?: string
+    imageUrl?: string // Add support for image URLs
   } = {}
 ): Promise<GeminiResponse> {
   const apiKey = process.env.GEMINI_API_KEY
@@ -32,16 +33,35 @@ export async function generateGeminiReply(
     attempt += 1
     try {
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10000)
+      const timeoutId = setTimeout(() => controller.abort(), 15000) // Increased timeout for image processing
+
+      // Build the parts array - text + optional image
+      const parts: any[] = [{ text: prompt }]
+      
+      // Add image if provided
+      if (options.imageUrl) {
+        // Fetch image and convert to base64
+        const imageResponse = await fetch(options.imageUrl)
+        if (!imageResponse.ok) {
+          throw new Error(`Failed to fetch image: ${imageResponse.status}`)
+        }
+        
+        const imageBuffer = await imageResponse.arrayBuffer()
+        const base64Image = Buffer.from(imageBuffer).toString('base64')
+        const mimeType = imageResponse.headers.get('content-type') || 'image/jpeg'
+        
+        parts.push({
+          inline_data: {
+            mime_type: mimeType,
+            data: base64Image
+          }
+        })
+      }
 
       const body = {
         contents: [
           {
-            parts: [
-              {
-                text: prompt
-              }
-            ]
+            parts: parts
           }
         ]
       }

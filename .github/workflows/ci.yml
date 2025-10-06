@@ -7,8 +7,9 @@ on:
     branches: [main, develop]
 
 jobs:
-  test:
+  lint-and-build:
     runs-on: ubuntu-latest
+    name: Lint and Build
 
     steps:
       - name: Checkout code
@@ -28,6 +29,51 @@ jobs:
 
       - name: Build application
         run: npm run build
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    name: Unit Tests
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm test -- --coverage --passWithNoTests
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        if: always()
+        with:
+          file: ./coverage/lcov.info
+          flags: unittests
+          name: unit-tests
+
+  migration-tests:
+    runs-on: ubuntu-latest
+    name: Database Migration Tests
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
@@ -50,6 +96,104 @@ jobs:
         run: |
           supabase gen types typescript --local > src/types/database.ts
           git diff --exit-code src/types/database.ts || echo "Types need to be regenerated"
+
+      - name: Stop Supabase
+        if: always()
+        run: |
+          supabase stop
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    name: Integration Tests
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'run-integration-tests')
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Create test environment file
+        run: |
+          echo "NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321" > .env.test
+          echo "SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU" >> .env.test
+          echo "GEMINI_API_KEY=test-key" >> .env.test
+          echo "TELEGRAM_BOT_TOKEN=test-token" >> .env.test
+
+      - name: Start Supabase local instance
+        run: |
+          supabase start
+
+      - name: Run integration tests
+        run: npm run test:integration
+
+      - name: Stop Supabase
+        if: always()
+        run: |
+          supabase stop
+
+  e2e-tests:
+    runs-on: ubuntu-latest
+    name: E2E User Behavior Tests
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'run-e2e-tests')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Create test environment file
+        run: |
+          echo "NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321" > .env.test
+          echo "SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU" >> .env.test
+          echo "GEMINI_API_KEY=test-key" >> .env.test
+          echo "TELEGRAM_BOT_TOKEN=test-token" >> .env.test
+
+      - name: Start Supabase local instance
+        run: |
+          supabase start
+
+      - name: Run E2E tests
+        run: npm run test:e2e
 
       - name: Stop Supabase
         if: always()
