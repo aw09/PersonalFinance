@@ -1,7 +1,7 @@
-// Enhanced Gemini Agent V3 with Integrated Specialized Agents
-// Integrates all specialized agents for comprehensive query processing
+// Enhanced Gemini Agent V3 with LangGraph Integration
+// Integrates LangGraph for stateful, graph-based query processing
 
-import { orchestrateQuery, orchestrateTextQuery, OrchestrationRequest } from './agentOrchestrator'
+import { orchestrateQuery, orchestrateTextQuery } from './agentOrchestrator'
 import { getTelegramUser } from './telegramAuth'
 import {
   getTelegramUserWallets,
@@ -9,6 +9,28 @@ import {
   getTelegramUserBudgets,
   getTelegramUserCategories
 } from './telegramCrud'
+
+// Define the request interface locally
+interface OrchestrationRequest {
+  userInput: string | File | ArrayBuffer
+  userId: string
+  telegramUserId?: number
+  context: {
+    hasWallets: boolean
+    hasTransactions: boolean
+    hasBudgets: boolean
+    hasCategories: boolean
+    defaultCurrency?: string
+    experienceLevel?: 'beginner' | 'intermediate' | 'advanced'
+    conversationHistory?: string[]
+  }
+  options: {
+    includeConfidence?: boolean
+    maxTools?: number
+    enableRAG?: boolean
+    securityLevel?: 'low' | 'medium' | 'high'
+  }
+}
 
 // Rate limiting (same as previous versions)
 const userBuckets: Map<number, { count: number; windowStart: number }> = new Map()
@@ -324,43 +346,7 @@ function formatAgentName(agentName: string): string {
 
 // General help with agent capabilities
 export function getAgentCapabilitiesHelp(): string {
-  return `🤖 **Enhanced AI Assistant Capabilities**
-
-I now use specialized agents to provide better assistance:
-
-🛡️ **Security Agent**
-• Protects against malicious inputs
-• Ensures safe processing of your queries
-
-🧠 **Knowledge Agent**
-• Enhanced with financial expertise
-• Provides context-aware advice and tips
-
-🔧 **Tools Agent**
-• Intelligently selects the right tools
-• Can use multiple tools for complex requests
-
-🖼️ **Image Processing Agent**
-• Process receipt images automatically
-• Extract transaction details from photos
-• Convert documents to structured data
-
-📊 **Quality Agent**
-• Evaluates response accuracy
-• Provides confidence scores
-• Suggests improvements
-
-**New Features:**
-• Upload receipt photos to auto-create transactions
-• Ask complex financial questions with knowledge enhancement
-• Get confidence scores on responses (use /confidence command)
-• Enhanced security for all interactions
-
-Try saying:
-• "Upload a receipt" (then send an image)
-• "Give me budgeting advice with confidence score"
-• "Analyze my spending patterns using multiple data sources"
-• "/health" to check system status`
+  return `🤖 **Enhanced AI Assistant with LangGraph**\n\nI now use LangGraph for stateful, graph-based processing of your requests:\n\n🛡️ **Security Agent**\n• Protects against malicious inputs\n• Ensures safe processing of your queries\n\n🧠 **Knowledge Agent**\n• Enhanced with financial expertise\n• Provides context-aware advice and tips\n\n🔧 **Tools Agent**\n• Intelligently selects the right tools\n• Can use multiple tools for complex requests\n\n🖼️ **Image Processing Agent**\n• Process receipt images automatically\n• Extract transaction details from photos\n• Convert documents to structured data\n\n📊 **Quality Agent**\n• Evaluates response accuracy\n• Provides confidence scores\n• Suggests improvements\n\n⚡ **LangGraph Benefits:**\n• Stateful conversation management\n• Conditional routing based on context\n• Persistent memory across interactions\n• Human-in-the-loop capabilities\n• Streaming responses for better UX\n\n**New Features:**\n• Upload receipt photos to auto-create transactions\n• Ask complex financial questions with knowledge enhancement\n• Get confidence scores on responses (use /confidence command)\n• Enhanced security for all interactions\n\nTry saying:\n• "Upload a receipt" (then send an image)\n• "Give me budgeting advice with confidence score"\n• "Analyze my spending patterns using multiple data sources"\n• "/health" to check system status`
 }
 
 // Backward compatibility - delegates to the appropriate enhanced function

@@ -26,6 +26,10 @@
     "db:generate-types": "npx supabase gen types typescript --local > src/types/database.ts"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@langchain/core": "^0.3.78",
+    "@langchain/google-genai": "^0.2.18",
+    "@langchain/langgraph": "^0.4.9",
     "@supabase/auth-helpers-nextjs": "^0.10.0",
     "@supabase/auth-ui-react": "^0.4.7",
     "@supabase/auth-ui-shared": "^0.1.8",
