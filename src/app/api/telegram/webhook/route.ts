@@ -1095,6 +1095,12 @@ async function editTelegramMessage(
     if (!response.ok) {
       const errorText = await response.text()
       console.error('Failed to edit Telegram message:', response.status, errorText)
+      
+      // If message is too old to edit, send a new message instead
+      if (errorText.includes('too old to edit') || errorText.includes('message is too old')) {
+        console.log('Message too old, sending new message instead')
+        await sendTelegramMessage(botToken, chatId, text, keyboard)
+      }
     } else {
       console.log('Successfully edited Telegram message')
     }
