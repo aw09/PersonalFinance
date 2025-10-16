@@ -1095,12 +1095,9 @@ async function editTelegramMessage(
     if (!response.ok) {
       const errorText = await response.text()
       console.error('Failed to edit Telegram message:', response.status, errorText)
-      
-      // If message is too old to edit, send a new message instead
-      if (errorText.includes('too old to edit') || errorText.includes('message is too old')) {
-        console.log('Message too old, sending new message instead')
-        await sendTelegramMessage(botToken, chatId, text, keyboard)
-      }
+
+      console.log('Falling back to sending a new message instead of editing')
+      await sendTelegramMessage(botToken, chatId, text, keyboard)
     } else {
       console.log('Successfully edited Telegram message')
     }
@@ -1111,12 +1108,14 @@ async function editTelegramMessage(
         console.error('Telegram message edit timeout (expected in sandboxed environments)')
       } else if (error.message.includes('ETIMEDOUT') || error.message.includes('fetch failed')) {
         console.error('Telegram API connection timeout for edit (expected in sandboxed environments):', error.message)
+        await sendTelegramMessage(botToken, chatId, text, keyboard)
       } else {
         console.error('Error editing Telegram message:', {
           name: error.name,
           message: error.message,
           stack: error.stack
         })
+        await sendTelegramMessage(botToken, chatId, text, keyboard)
       }
     } else {
       console.error('Unknown error editing Telegram message:', error)
