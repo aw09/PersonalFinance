@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from datetime import date
 from decimal import Decimal
@@ -140,9 +141,8 @@ async def init_bot() -> None:
         logger.info("Telegram bot or webhook secret not configured; skipping bot initialisation.")
         return
     if not settings.backend_base_url:
-        raise RuntimeError(
-            "BACKEND_BASE_URL must be set to configure Telegram webhooks."
-        )
+        logger.warning("BACKEND_BASE_URL is missing; skipping Telegram webhook setup.")
+        return
 
     base_url = str(settings.backend_base_url)
     webhook_url = base_url.rstrip("/") + f"/api/telegram/webhook/{settings.telegram_webhook_secret}"
@@ -155,9 +155,18 @@ async def init_bot() -> None:
         api_client = FinanceApiClient(base_url)
         application = _create_application(settings.telegram_bot_token, api_client)
 
-        await application.initialize()
-        await application.start()
-        await application.bot.set_webhook(url=webhook_url, drop_pending_updates=True)
+        try:
+            await application.initialize()
+            await application.start()
+            await application.bot.set_webhook(url=webhook_url, drop_pending_updates=True)
+        except Exception:
+            logger.exception("Failed to initialise Telegram webhook; bot disabled for this run.")
+            with contextlib.suppress(Exception):
+                await application.stop()
+            with contextlib.suppress(Exception):
+                await application.shutdown()
+            await api_client.aclose()
+            return
 
         _application = application
         _api_client = api_client
