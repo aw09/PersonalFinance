@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -10,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from .config import get_settings
 
+logger = logging.getLogger(__name__)
+
 settings = get_settings()
 engine = create_async_engine(settings.database_url, echo=False, future=True)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
@@ -18,7 +21,8 @@ SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSe
 def _get_alembic_config() -> Config:
     config_path = Path(__file__).resolve().parent.parent / "alembic.ini"
     config = Config(str(config_path))
-    config.set_main_option("sqlalchemy.url", settings.database_url)
+    migrations_url = settings.direct_database_url or settings.database_url
+    config.set_main_option("sqlalchemy.url", migrations_url)
     return config
 
 
@@ -30,5 +34,8 @@ async def get_db() -> AsyncIterator[AsyncSession]:
 
 async def init_db() -> None:
     """Apply database migrations on startup."""
+    if not settings.auto_run_migrations:
+        logger.info("AUTO_RUN_MIGRATIONS disabled; skipping Alembic upgrade on startup.")
+        return
     config = _get_alembic_config()
     await anyio.to_thread.run_sync(command.upgrade, config, "head")

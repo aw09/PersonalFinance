@@ -66,6 +66,7 @@ docker run --rm -p 8000:8000 \
 
 ```env
 DATABASE_URL=postgresql+asyncpg://username:password@localhost:5432/personal_finance
+DIRECT_DATABASE_URL=postgresql://username:password@localhost:5432/personal_finance
 GEMINI_API_KEY=your-google-generative-ai-key
 TELEGRAM_BOT_TOKEN=bot-token-from-botfather
 TELEGRAM_DEFAULT_CHAT_ID=optional-default-chat-id
@@ -77,6 +78,7 @@ LLM_RECEIPT_PROMPT_PATH=prompts/receipt_prompt.txt
 ## Development notes
 
 - Database migrations are handled with Alembic. Use `alembic revision --autogenerate -m "message"` to create new migrations when models change.
+- Supply `DIRECT_DATABASE_URL` when your primary `DATABASE_URL` points to a connection pooler that restricts migrations (e.g., Supabase session pooler). The app will use the main URL for runtime and the direct URL for Alembic.
 - The Gemini integration expects receipt images as bytes (e.g. via multipart upload). It sends the raw image to the API and prompts Gemini for structured JSON. Inspect `app/services/llm.py` for details and safeguards.
 - The Telegram bot runs in webhook mode via `POST /api/telegram/webhook/{TELEGRAM_WEBHOOK_SECRET}`. Ensure `BACKEND_BASE_URL` points to a publicly reachable HTTPS endpoint before enabling it.
 

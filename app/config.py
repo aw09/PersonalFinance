@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     telegram_webhook_secret: Optional[str] = Field(
         default=None, alias="TELEGRAM_WEBHOOK_SECRET"
     )
+    direct_database_url: Optional[str] = Field(
+        default=None,
+        alias="DIRECT_DATABASE_URL",
+        description="Optional direct Postgres connection string used for running migrations.",
+    )
     llm_receipt_prompt_path: Path = Field(
         default=Path("prompts/receipt_prompt.txt"),
         alias="LLM_RECEIPT_PROMPT_PATH",
@@ -30,6 +35,7 @@ class Settings(BaseSettings):
         alias="BACKEND_BASE_URL",
         description="The public URL where FastAPI is reachable (used by Telegram webhooks).",
     )
+    auto_run_migrations: bool = Field(default=True, alias="AUTO_RUN_MIGRATIONS")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
