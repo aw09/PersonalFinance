@@ -33,15 +33,34 @@ app/
    pip install -r requirements.txt
    ```
 
-3. Provide configuration (see `.env.example`) then start the API
+3. Copy `.env.example` to `.env` and update the values for your environment.
+
+4. Apply the database migrations
+   ```bash
+   alembic upgrade head
+   ```
+
+5. Start the API
    ```bash
    uvicorn app.main:app --reload
    ```
 
-4. (Optional) start the Telegram bot poller once the API is running
+6. (Optional) start the Telegram bot poller once the API is running
    ```bash
    python -m app.telegram.bot
    ```
+
+### Docker
+
+You can run the API inside a container:
+
+```bash
+docker build -t personal-finance .
+docker run --rm -p 8000:8000 \
+  -e DATABASE_URL=postgresql+asyncpg://username:password@host:5432/personal_finance \
+  -e GEMINI_API_KEY=your-google-generative-ai-key \
+  personal-finance
+```
 
 ## Environment
 
@@ -50,17 +69,17 @@ DATABASE_URL=postgresql+asyncpg://username:password@localhost:5432/personal_fina
 GEMINI_API_KEY=your-google-generative-ai-key
 TELEGRAM_BOT_TOKEN=bot-token-from-botfather
 TELEGRAM_DEFAULT_CHAT_ID=optional-default-chat-id
+LLM_RECEIPT_PROMPT_PATH=prompts/receipt_prompt.txt
 ```
 
 ## Development notes
 
-- The first API start-up will auto-create tables (handy for local development). Switch to Alembic migrations before production use.
+- Database migrations are handled with Alembic. Use `alembic revision --autogenerate -m "message"` to create new migrations when models change.
 - The Gemini integration expects receipt images as bytes (e.g. via multipart upload). It sends the raw image to the API and prompts Gemini for structured JSON. Inspect `app/services/llm.py` for details and safeguards.
 - The Telegram bot uses long polling and talks to the API endpoints. Adjust handlers or move to webhooks if you host it elsewhere.
 
 ## Next steps
 
 - Wire up authentication if you need multi-user support.
-- Replace auto-migrations with Alembic migrations.
 - Expand Telegram flows (e.g., inline keyboards for marking installments as paid).
 - Add reporting endpoints (monthly summaries, category breakdowns, etc.).
