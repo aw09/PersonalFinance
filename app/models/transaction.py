@@ -13,7 +13,7 @@ from .base import Base
 
 
 class TransactionType(str, Enum):
-    EXPENDITURE = "expenditure"
+    EXPENSE = "expense"
     INCOME = "income"
     DEBT = "debt"
     RECEIVABLE = "receivable"
@@ -32,19 +32,11 @@ class Transaction(Base):
     category: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     source: Mapped[str] = mapped_column(String(32), default="manual", nullable=False)
     items: Mapped[Optional[list[dict]]] = mapped_column(JSONB, nullable=True)
-    _metadata: Mapped[Optional[dict]] = mapped_column("metadata", JSONB, nullable=True)
+    metadata_json: Mapped[Optional[dict]] = mapped_column("metadata", JSONB, nullable=True)
 
     debt_installment: Mapped[Optional["DebtInstallment"]] = relationship(
         back_populates="transaction", uselist=False
     )
-
-    @property
-    def metadata(self) -> Optional[dict]:
-        return self._metadata
-
-    @metadata.setter
-    def metadata(self, value: Optional[dict]) -> None:
-        self._metadata = value
 
 
 from .debt import DebtInstallment  # noqa: E402  # avoid circular import at runtime

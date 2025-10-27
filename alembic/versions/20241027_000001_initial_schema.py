@@ -19,16 +19,32 @@ depends_on: Sequence[str] | None = None
 
 
 transaction_type_enum = postgresql.ENUM(
-    "expenditure",
+    "expense",
     "income",
     "debt",
     "receivable",
     name="transactiontype",
+    create_type=False,
 )
 
 
 def upgrade() -> None:
-    transaction_type_enum.create(op.get_bind(), checkfirst=True)
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_type t
+                JOIN pg_namespace n ON n.oid = t.typnamespace
+                WHERE t.typname = 'transactiontype'
+                AND n.nspname = current_schema()
+            ) THEN
+                CREATE TYPE transactiontype AS ENUM ('expense', 'income', 'debt', 'receivable');
+            END IF;
+        END
+        $$;
+        """
+    )
 
     op.create_table(
         "transactions",
@@ -120,4 +136,4 @@ def downgrade() -> None:
     op.drop_table("debt_installments")
     op.drop_table("debts")
     op.drop_table("transactions")
-    transaction_type_enum.drop(op.get_bind(), checkfirst=True)
+    op.execute("DROP TYPE IF EXISTS transactiontype")

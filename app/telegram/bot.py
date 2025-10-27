@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import date
 from decimal import Decimal
+from typing import Any
 
 import httpx
 from telegram import Update
@@ -22,12 +24,12 @@ logger = logging.getLogger(__name__)
 
 
 class FinanceApiClient:
-    """Simple HTTP client that forwards Telegram entries to the FastAPI backend."""
+    """HTTP client that forwards Telegram entries to the FastAPI backend."""
 
     def __init__(self, base_url: str) -> None:
         self.client = httpx.AsyncClient(base_url=base_url, timeout=10)
 
-    async def create_transaction(self, payload: dict) -> dict:
+    async def create_transaction(self, payload: dict[str, Any]) -> dict[str, Any]:
         response = await self.client.post("/api/transactions", json=payload)
         response.raise_for_status()
         return response.json()
@@ -36,10 +38,15 @@ class FinanceApiClient:
         await self.client.aclose()
 
 
+_application: Application | None = None
+_api_client: FinanceApiClient | None = None
+_lock = asyncio.Lock()
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "👋 Hi! Send `/add <type> <amount> <description>` to store a transaction.\n"
-        "Types: expenditure, income, debt, receivable.",
+        "Types: expense, income, debt, receivable.",
         parse_mode=ParseMode.MARKDOWN,
     )
 
@@ -50,7 +57,7 @@ async def add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     args = update.message.text.split(maxsplit=3)
     if len(args) < 4:
         await update.message.reply_text(
-            "Usage: `/add expenditure 12.34 Grocery shopping`", parse_mode=ParseMode.MARKDOWN
+            "Usage: `/add expense 12.34 Grocery shopping`", parse_mode=ParseMode.MARKDOWN
         )
         return
     _, tx_type, amount_raw, description = args
@@ -63,7 +70,7 @@ async def free_text_transaction(update: Update, context: ContextTypes.DEFAULT_TY
     parts = update.message.text.split(maxsplit=2)
     if len(parts) < 2:
         await update.message.reply_text(
-            "Try `income 100 Salary` or `/add expenditure 12 lunch`."
+            "Try `income 100 Salary` or `/add expense 12 lunch`."
         )
         return
     if len(parts) == 2:
@@ -112,36 +119,84 @@ async def _create_transaction(
         )
 
 
-def build_application() -> Application:
-    settings = get_settings()
-    if not settings.telegram_bot_token:
-        raise RuntimeError("TELEGRAM_BOT_TOKEN is not configured.")
-    base_url = settings.backend_base_url or "http://localhost:8000"
-    api_client = FinanceApiClient(base_url)
-
+def _create_application(token: str, api_client: FinanceApiClient) -> Application:
     application = (
         Application.builder()
-        .token(settings.telegram_bot_token)
+        .token(token)
         .rate_limiter(AIORateLimiter())
         .build()
     )
     application.bot_data["api_client"] = api_client
-
-    async def on_shutdown(_: Application) -> None:
-        await api_client.aclose()
-
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("add", add))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, free_text_transaction))
-    application.post_shutdown.register(on_shutdown)
     return application
 
 
-def main() -> None:
-    logging.basicConfig(level=logging.INFO)
-    application = build_application()
-    application.run_polling(close_loop=False)
+async def init_bot() -> None:
+    """Initialise the Telegram bot and register the webhook."""
+    settings = get_settings()
+    if not settings.telegram_bot_token or not settings.telegram_webhook_secret:
+        logger.info("Telegram bot or webhook secret not configured; skipping bot initialisation.")
+        return
+    if not settings.backend_base_url:
+        raise RuntimeError(
+            "BACKEND_BASE_URL must be set to configure Telegram webhooks."
+        )
+
+    base_url = str(settings.backend_base_url)
+    webhook_url = base_url.rstrip("/") + f"/api/telegram/webhook/{settings.telegram_webhook_secret}"
+
+    async with _lock:
+        global _application, _api_client
+        if _application is not None:
+            return
+
+        api_client = FinanceApiClient(base_url)
+        application = _create_application(settings.telegram_bot_token, api_client)
+
+        await application.initialize()
+        await application.start()
+        await application.bot.set_webhook(url=webhook_url, drop_pending_updates=True)
+
+        _application = application
+        _api_client = api_client
+        logger.info("Telegram webhook configured at %s", webhook_url)
 
 
-if __name__ == "__main__":
-    main()
+async def handle_update(payload: dict[str, Any]) -> None:
+    """Process a Telegram update forwarded by FastAPI."""
+    async with _lock:
+        if _application is None:
+            raise RuntimeError("Telegram bot is not initialised.")
+        application = _application
+    update = Update.de_json(payload, application.bot)
+    await application.process_update(update)
+
+
+async def shutdown_bot() -> None:
+    """Tear down the Telegram bot and remove the webhook."""
+    async with _lock:
+        global _application, _api_client
+        if _application is None:
+            return
+        try:
+            await _application.bot.delete_webhook()
+        except Exception:
+            logger.exception("Failed to delete Telegram webhook cleanly.")
+        await _application.stop()
+        await _application.shutdown()
+        if _api_client:
+            await _api_client.aclose()
+        _application = None
+        _api_client = None
+
+
+async def main() -> None:  # pragma: no cover - helper for local debugging
+    """Manual entry point that keeps backward compatibility for local tests."""
+    await init_bot()
+    logger.info("Webhook mode active. Provide updates via FastAPI endpoint.")
+
+
+if __name__ == "__main__":  # pragma: no cover
+    asyncio.run(main())

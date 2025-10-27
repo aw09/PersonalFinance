@@ -1,7 +1,7 @@
 # PersonalFinance
 
 Dead simple personal finance backend built with FastAPI and PostgreSQL. Features:
-- Record transactions for expenditure, income, debts, and receivables
+- Record transactions for expense, income, debts, and receivables
 - Track debt agreements, including their installment schedules
 - Accept receipt images and use Google's Gemini LLM to extract structured transactions (no manual OCR needed)
 - Optional Telegram bot interface for logging transactions on the go
@@ -45,10 +45,7 @@ app/
    uvicorn app.main:app --reload
    ```
 
-6. (Optional) start the Telegram bot poller once the API is running
-   ```bash
-   python -m app.telegram.bot
-   ```
+   When `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, and `BACKEND_BASE_URL` are set, the bot registers a webhook automatically and begins processing updates through the FastAPI endpoint.
 
 ### Docker
 
@@ -59,6 +56,9 @@ docker build -t personal-finance .
 docker run --rm -p 8000:8000 \
   -e DATABASE_URL=postgresql+asyncpg://username:password@host:5432/personal_finance \
   -e GEMINI_API_KEY=your-google-generative-ai-key \
+  -e TELEGRAM_BOT_TOKEN=bot-token-from-botfather \
+  -e TELEGRAM_WEBHOOK_SECRET=choose-a-random-secret \
+  -e BACKEND_BASE_URL=https://your-public-domain.example \
   personal-finance
 ```
 
@@ -69,6 +69,8 @@ DATABASE_URL=postgresql+asyncpg://username:password@localhost:5432/personal_fina
 GEMINI_API_KEY=your-google-generative-ai-key
 TELEGRAM_BOT_TOKEN=bot-token-from-botfather
 TELEGRAM_DEFAULT_CHAT_ID=optional-default-chat-id
+TELEGRAM_WEBHOOK_SECRET=choose-a-random-secret
+BACKEND_BASE_URL=https://your-public-domain.example
 LLM_RECEIPT_PROMPT_PATH=prompts/receipt_prompt.txt
 ```
 
@@ -76,7 +78,7 @@ LLM_RECEIPT_PROMPT_PATH=prompts/receipt_prompt.txt
 
 - Database migrations are handled with Alembic. Use `alembic revision --autogenerate -m "message"` to create new migrations when models change.
 - The Gemini integration expects receipt images as bytes (e.g. via multipart upload). It sends the raw image to the API and prompts Gemini for structured JSON. Inspect `app/services/llm.py` for details and safeguards.
-- The Telegram bot uses long polling and talks to the API endpoints. Adjust handlers or move to webhooks if you host it elsewhere.
+- The Telegram bot runs in webhook mode via `POST /api/telegram/webhook/{TELEGRAM_WEBHOOK_SECRET}`. Ensure `BACKEND_BASE_URL` points to a publicly reachable HTTPS endpoint before enabling it.
 
 ## Next steps
 

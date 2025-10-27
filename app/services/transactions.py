@@ -44,7 +44,7 @@ async def create_transaction(
         items=_normalise_items(
             [item.model_dump(exclude_none=True) for item in payload.items] if payload.items else None
         ),
-        metadata=payload.metadata,
+        metadata_json=payload.metadata,
     )
     session.add(transaction)
     await session.commit()

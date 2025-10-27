@@ -36,11 +36,11 @@ def _parse_transaction_payload(payload: dict) -> TransactionCreate:
     occurred_at_raw = transaction_data.get("occurred_at")
     occurred_at = date.fromisoformat(occurred_at_raw) if occurred_at_raw else date.today()
 
-    tx_type_raw = transaction_data.get("type", TransactionType.EXPENDITURE.value)
+    tx_type_raw = transaction_data.get("type", TransactionType.EXPENSE.value)
     try:
         tx_type = TransactionType(tx_type_raw)
     except ValueError:
-        tx_type = TransactionType.EXPENDITURE
+        tx_type = TransactionType.EXPENSE
 
     return TransactionCreate(
         type=tx_type,
@@ -57,9 +57,9 @@ def _parse_transaction_payload(payload: dict) -> TransactionCreate:
 
 @router.post("/receipt", response_model=TransactionRead, status_code=status.HTTP_201_CREATED)
 async def parse_receipt_endpoint(
+    session: SessionDep,
     file: UploadFile = File(...),
     commit_transaction: bool = Form(default=True),
-    session: SessionDep,
 ) -> TransactionRead | JSONResponse:
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Only image uploads are supported.")

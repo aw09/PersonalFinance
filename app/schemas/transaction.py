@@ -37,7 +37,7 @@ class TransactionCreate(BaseModel):
 class TransactionRead(BaseModel):
     """API response shape for transactions."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: UUID
     type: TransactionType
@@ -47,7 +47,7 @@ class TransactionRead(BaseModel):
     category: Optional[str]
     occurred_at: date
     items: Optional[list[TransactionItem]]
-    metadata: Optional[dict[str, Any]]
+    metadata: Optional[dict[str, Any]] = Field(default=None, alias="metadata_json")
     source: str
     created_at: datetime
     updated_at: datetime
