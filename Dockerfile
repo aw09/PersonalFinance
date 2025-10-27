@@ -12,6 +12,7 @@ RUN apt-get update \
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install python-telegram-bot[rate-limiter]
 
 COPY alembic.ini .
 COPY alembic ./alembic
