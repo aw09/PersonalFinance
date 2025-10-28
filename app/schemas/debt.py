@@ -16,6 +16,7 @@ class DebtCreate(BaseModel):
     start_date: date
     interest_rate: Optional[Decimal] = Field(default=None)
     frequency_months: int = Field(default=1, gt=0, le=12)
+    user_id: UUID
 
 
 class DebtUpdate(BaseModel):
@@ -49,6 +50,7 @@ class DebtRead(BaseModel):
     start_date: date
     interest_rate: Optional[Decimal]
     status: str
+    user_id: UUID
     created_at: datetime
     updated_at: datetime
     installments: list[DebtInstallmentRead]

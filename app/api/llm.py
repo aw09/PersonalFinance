@@ -1,6 +1,7 @@
 from datetime import date
 from decimal import Decimal
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import JSONResponse
@@ -16,7 +17,7 @@ router = APIRouter()
 SessionDep = Annotated[AsyncSession, Depends(get_db)]
 
 
-def _parse_transaction_payload(payload: dict) -> TransactionCreate:
+def _parse_transaction_payload(payload: dict, *, user_id: UUID) -> TransactionCreate:
     try:
         transaction_data = payload["transaction"]
     except KeyError as exc:
@@ -52,6 +53,7 @@ def _parse_transaction_payload(payload: dict) -> TransactionCreate:
         items=items or None,
         metadata=payload.get("metadata"),
         source="llm",
+        user_id=user_id,
     )
 
 
@@ -60,6 +62,7 @@ async def parse_receipt_endpoint(
     session: SessionDep,
     file: UploadFile = File(...),
     commit_transaction: bool = Form(default=True),
+    user_id: UUID = Form(...),
 ) -> TransactionRead | JSONResponse:
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Only image uploads are supported.")
@@ -68,7 +71,7 @@ async def parse_receipt_endpoint(
     service = get_receipt_service()
     try:
         payload = await service.parse_receipt(image_bytes)
-        transaction_payload = _parse_transaction_payload(payload)
+        transaction_payload = _parse_transaction_payload(payload, user_id=user_id)
     except ReceiptExtractionError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

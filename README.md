@@ -5,6 +5,7 @@ Dead simple personal finance backend built with FastAPI and PostgreSQL. Features
 - Track debt agreements, including their installment schedules
 - Accept receipt images and use Google's Gemini LLM to extract structured transactions (no manual OCR needed)
 - Optional Telegram bot interface for logging transactions on the go
+- Multi-user aware: transactions and debts belong to users identified by their Telegram account (the bot auto-creates them on first message)
 
 ## Project layout
 
@@ -69,9 +70,9 @@ DATABASE_URL=postgresql+asyncpg://username:password@localhost:5432/personal_fina
 DIRECT_DATABASE_URL=postgresql://username:password@localhost:5432/personal_finance
 GEMINI_API_KEY=your-google-generative-ai-key
 TELEGRAM_BOT_TOKEN=bot-token-from-botfather
-TELEGRAM_DEFAULT_CHAT_ID=optional-default-chat-id
 TELEGRAM_WEBHOOK_SECRET=choose-a-random-secret
 BACKEND_BASE_URL=https://your-public-domain.example
+AUTO_RUN_MIGRATIONS=true
 LLM_RECEIPT_PROMPT_PATH=prompts/receipt_prompt.txt
 ```
 
@@ -81,6 +82,8 @@ LLM_RECEIPT_PROMPT_PATH=prompts/receipt_prompt.txt
 - Supply `DIRECT_DATABASE_URL` when your primary `DATABASE_URL` points to a connection pooler that restricts migrations (e.g., Supabase session pooler). The app will use the main URL for runtime and the direct URL for Alembic.
 - The Gemini integration expects receipt images as bytes (e.g. via multipart upload). It sends the raw image to the API and prompts Gemini for structured JSON. Inspect `app/services/llm.py` for details and safeguards.
 - The Telegram bot runs in webhook mode via `POST /api/telegram/webhook/{TELEGRAM_WEBHOOK_SECRET}`. Ensure `BACKEND_BASE_URL` points to a publicly reachable HTTPS endpoint before enabling it.
+- `AUTO_RUN_MIGRATIONS=false` skips the Alembic upgrade on startup; helpful if you prefer manual migrations.
+- Users created from Telegram chats (via their `from.id`) are auto-provisioned; you can also manage them explicitly through `/api/users`.
 
 ## Next steps
 

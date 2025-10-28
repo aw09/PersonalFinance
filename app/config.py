@@ -15,9 +15,6 @@ class Settings(BaseSettings):
         default=None, alias="GEMINI_API_KEY", description="Google Generative AI key"
     )
     telegram_bot_token: Optional[str] = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
-    telegram_default_chat_id: Optional[str] = Field(
-        default=None, alias="TELEGRAM_DEFAULT_CHAT_ID"
-    )
     telegram_webhook_secret: Optional[str] = Field(
         default=None, alias="TELEGRAM_WEBHOOK_SECRET"
     )

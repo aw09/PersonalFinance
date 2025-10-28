@@ -32,6 +32,7 @@ class TransactionCreate(BaseModel):
     items: Optional[list[TransactionItem]] = None
     metadata: Optional[dict[str, Any]] = None
     source: str = Field(default="manual", max_length=32)
+    user_id: UUID
 
 
 class TransactionRead(BaseModel):
@@ -49,5 +50,6 @@ class TransactionRead(BaseModel):
     items: Optional[list[TransactionItem]]
     metadata: Optional[dict[str, Any]] = Field(default=None, alias="metadata_json")
     source: str
+    user_id: UUID
     created_at: datetime
     updated_at: datetime

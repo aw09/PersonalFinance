@@ -1,7 +1,7 @@
-from typing import Annotated
+from typing import Annotated, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
@@ -33,8 +33,10 @@ async def create_debt_endpoint(payload: DebtCreate, session: SessionDep) -> Debt
 
 
 @router.get("", response_model=list[DebtRead])
-async def list_debts_endpoint(session: SessionDep) -> list[DebtRead]:
-    debts = await list_debts(session)
+async def list_debts_endpoint(
+    session: SessionDep, user_id: Optional[UUID] = Query(default=None)
+) -> list[DebtRead]:
+    debts = await list_debts(session, user_id=user_id)
     return [DebtRead.model_validate(d) for d in debts]
 
 

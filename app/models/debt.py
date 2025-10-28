@@ -25,10 +25,12 @@ class Debt(Base):
         Numeric(6, 3), nullable=True, doc="Optional nominal interest rate (yearly)."
     )
     status: Mapped[str] = mapped_column(String(32), default="active", nullable=False)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
 
     installments: Mapped[list["DebtInstallment"]] = relationship(
         back_populates="debt", cascade="all, delete-orphan"
     )
+    user: Mapped["User"] = relationship(back_populates="debts")
 
 
 class DebtInstallment(Base):
@@ -51,3 +53,4 @@ class DebtInstallment(Base):
 
 
 from .transaction import Transaction  # noqa: E402  # avoid circular import during definition
+from .user import User  # noqa: E402

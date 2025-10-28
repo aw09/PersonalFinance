@@ -8,6 +8,7 @@ from .debts import (
 )
 from .llm import get_receipt_service
 from .transactions import create_transaction, get_transaction, list_transactions
+from .users import create_user, get_user, get_user_by_telegram_id, list_users
 
 __all__ = [
     "create_transaction",
@@ -20,4 +21,8 @@ __all__ = [
     "get_installment",
     "mark_installment_paid",
     "get_receipt_service",
+    "create_user",
+    "list_users",
+    "get_user",
+    "get_user_by_telegram_id",
 ]

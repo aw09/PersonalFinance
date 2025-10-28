@@ -29,9 +29,14 @@ async def list_transactions_endpoint(
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
     transaction_type: Optional[TransactionType] = Query(default=None),
+    user_id: Optional[UUID] = Query(default=None),
 ) -> list[TransactionRead]:
     transactions = await list_transactions(
-        session, limit=limit, offset=offset, transaction_type=transaction_type
+        session,
+        limit=limit,
+        offset=offset,
+        transaction_type=transaction_type,
+        user_id=user_id,
     )
     return [TransactionRead.model_validate(tx) for tx in transactions]
 

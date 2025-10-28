@@ -35,6 +35,7 @@ async def create_debt(session: AsyncSession, payload: DebtCreate) -> Debt:
         total_installments=payload.total_installments,
         start_date=payload.start_date,
         interest_rate=payload.interest_rate,
+        user_id=payload.user_id,
     )
     session.add(debt)
     await session.flush()
@@ -59,8 +60,10 @@ async def create_debt(session: AsyncSession, payload: DebtCreate) -> Debt:
     return debt
 
 
-async def list_debts(session: AsyncSession) -> list[Debt]:
+async def list_debts(session: AsyncSession, *, user_id: Optional[UUID] = None) -> list[Debt]:
     stmt = select(Debt).order_by(Debt.created_at.desc())
+    if user_id:
+        stmt = stmt.where(Debt.user_id == user_id)
     result = await session.execute(stmt)
     return result.scalars().unique().all()
 

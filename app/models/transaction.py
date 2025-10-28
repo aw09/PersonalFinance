@@ -4,6 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 from typing import Optional
+from uuid import UUID
 
 from sqlalchemy import Date, Enum as SqlEnum, ForeignKey, Numeric, String
 from sqlalchemy.dialects.postgresql import JSONB
@@ -33,10 +34,13 @@ class Transaction(Base):
     source: Mapped[str] = mapped_column(String(32), default="manual", nullable=False)
     items: Mapped[Optional[list[dict]]] = mapped_column(JSONB, nullable=True)
     metadata_json: Mapped[Optional[dict]] = mapped_column("metadata", JSONB, nullable=True)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
 
     debt_installment: Mapped[Optional["DebtInstallment"]] = relationship(
         back_populates="transaction", uselist=False
     )
+    user: Mapped["User"] = relationship(back_populates="transactions")
 
 
 from .debt import DebtInstallment  # noqa: E402  # avoid circular import at runtime
+from .user import User  # noqa: E402

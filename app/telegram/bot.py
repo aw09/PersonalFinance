@@ -30,6 +30,16 @@ class FinanceApiClient:
     def __init__(self, base_url: str) -> None:
         self.client = httpx.AsyncClient(base_url=base_url, timeout=10)
 
+    async def ensure_user(self, telegram_id: int, full_name: str | None) -> dict[str, Any]:
+        response = await self.client.get(f"/api/users/by-telegram/{telegram_id}")
+        if response.status_code == 404:
+            response = await self.client.post(
+                "/api/users",
+                json={"telegram_id": telegram_id, "full_name": full_name},
+            )
+        response.raise_for_status()
+        return response.json()
+
     async def create_transaction(self, payload: dict[str, Any]) -> dict[str, Any]:
         response = await self.client.post("/api/transactions", json=payload)
         response.raise_for_status()
@@ -46,7 +56,7 @@ _lock = asyncio.Lock()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
-        "👋 Hi! Send `/add <type> <amount> <description>` to store a transaction.\n"
+        "Hi! Send `/add <type> <amount> <description>` to store a transaction.\n"
         "Types: expense, income, debt, receivable.",
         parse_mode=ParseMode.MARKDOWN,
     )
@@ -95,6 +105,23 @@ async def _create_transaction(
         await update.message.reply_text(f"Invalid amount `{amount_raw}`.")
         return
 
+    api_client: FinanceApiClient = context.application.bot_data["api_client"]
+    tele_user = update.effective_user
+    if tele_user is None:
+        await update.message.reply_text("Could not determine your Telegram user.")
+        return
+
+    try:
+        user = await api_client.ensure_user(tele_user.id, tele_user.full_name)
+    except httpx.HTTPStatusError as exc:
+        logger.exception("Failed to ensure Telegram user in backend")
+        await update.message.reply_text(f"User sync error: {exc.response.text}")
+        return
+    except Exception:
+        logger.exception("Failed to ensure Telegram user in backend")
+        await update.message.reply_text("Could not sync your Telegram user with the backend.")
+        return
+
     payload = {
         "type": tx_type.lower(),
         "amount": str(amount.quantize(Decimal("0.01"))),
@@ -102,9 +129,8 @@ async def _create_transaction(
         "occurred_at": date.today().isoformat(),
         "currency": "USD",
         "source": "telegram",
+        "user_id": user["id"],
     }
-
-    api_client: FinanceApiClient = context.application.bot_data["api_client"]
     try:
         data = await api_client.create_transaction(payload)
     except httpx.HTTPStatusError as exc:
@@ -209,3 +235,7 @@ async def main() -> None:  # pragma: no cover - helper for local debugging
 
 if __name__ == "__main__":  # pragma: no cover
     asyncio.run(main())
+
+
+
+

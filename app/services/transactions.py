@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from decimal import Decimal
 from typing import Any, Optional
+from uuid import UUID
 
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,6 +46,7 @@ async def create_transaction(
             [item.model_dump(exclude_none=True) for item in payload.items] if payload.items else None
         ),
         metadata_json=payload.metadata,
+        user_id=payload.user_id,
     )
     session.add(transaction)
     await session.commit()
@@ -58,6 +60,7 @@ async def list_transactions(
     limit: int = 50,
     offset: int = 0,
     transaction_type: Optional[TransactionType] = None,
+    user_id: Optional[UUID] = None,
 ) -> Sequence[Transaction]:
     """Retrieve transactions with optional type filter."""
     stmt: Select[tuple[Transaction]] = select(Transaction).order_by(
@@ -65,6 +68,8 @@ async def list_transactions(
     )
     if transaction_type:
         stmt = stmt.where(Transaction.type == transaction_type)
+    if user_id:
+        stmt = stmt.where(Transaction.user_id == user_id)
     result = await session.execute(stmt.limit(limit).offset(offset))
     return result.scalars().all()
 

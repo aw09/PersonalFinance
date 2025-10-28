@@ -11,6 +11,7 @@ from .transaction import (
     TransactionRead,
     TransactionType,
 )
+from .user import UserCreate, UserRead
 
 __all__ = [
     "TransactionCreate",
@@ -22,4 +23,6 @@ __all__ = [
     "DebtUpdate",
     "DebtInstallmentRead",
     "InstallmentPaymentRequest",
+    "UserCreate",
+    "UserRead",
 ]
