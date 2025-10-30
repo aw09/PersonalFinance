@@ -32,7 +32,10 @@ class Settings(BaseSettings):
         alias="BACKEND_BASE_URL",
         description="The public URL where FastAPI is reachable (used by Telegram webhooks).",
     )
-    auto_run_migrations: bool = Field(default=True, alias="AUTO_RUN_MIGRATIONS")
+    telegram_register_webhook_on_start: bool = Field(
+        default=False, alias="TELEGRAM_REGISTER_WEBHOOK_ON_START"
+    )
+    auto_run_migrations: bool = Field(default=False, alias="AUTO_RUN_MIGRATIONS")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

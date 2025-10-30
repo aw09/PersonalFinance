@@ -71,8 +71,9 @@ DIRECT_DATABASE_URL=postgresql://username:password@localhost:5432/personal_finan
 GEMINI_API_KEY=your-google-generative-ai-key
 TELEGRAM_BOT_TOKEN=bot-token-from-botfather
 TELEGRAM_WEBHOOK_SECRET=choose-a-random-secret
+TELEGRAM_REGISTER_WEBHOOK_ON_START=false
 BACKEND_BASE_URL=https://your-public-domain.example
-AUTO_RUN_MIGRATIONS=true
+AUTO_RUN_MIGRATIONS=false
 LLM_RECEIPT_PROMPT_PATH=prompts/receipt_prompt.txt
 ```
 

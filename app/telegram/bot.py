@@ -184,7 +184,8 @@ async def init_bot() -> None:
         try:
             await application.initialize()
             await application.start()
-            await application.bot.set_webhook(url=webhook_url, drop_pending_updates=True)
+            if settings.telegram_register_webhook_on_start:
+                await application.bot.set_webhook(url=webhook_url, drop_pending_updates=True)
         except Exception:
             logger.exception("Failed to initialise Telegram webhook; bot disabled for this run.")
             with contextlib.suppress(Exception):
