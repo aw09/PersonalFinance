@@ -216,10 +216,6 @@ async def shutdown_bot() -> None:
         global _application, _api_client
         if _application is None:
             return
-        try:
-            await _application.bot.delete_webhook()
-        except Exception:
-            logger.exception("Failed to delete Telegram webhook cleanly.")
         await _application.stop()
         await _application.shutdown()
         if _api_client:
