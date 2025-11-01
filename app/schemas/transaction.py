@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..models.transaction import TransactionType
 
@@ -33,6 +33,19 @@ class TransactionCreate(BaseModel):
     metadata: Optional[dict[str, Any]] = None
     source: str = Field(default="manual", max_length=32)
     user_id: UUID
+
+    @field_validator("type", mode="before")
+    @classmethod
+    def _normalise_type(cls, value: TransactionType | str) -> TransactionType:
+        """Allow case-insensitive transaction types from external clients."""
+        if isinstance(value, TransactionType):
+            return value
+        if isinstance(value, str):
+            try:
+                return TransactionType(value.lower())
+            except ValueError as exc:
+                raise ValueError("Unsupported transaction type") from exc
+        raise TypeError("Transaction type must be a string or TransactionType instance")
 
 
 class TransactionRead(BaseModel):
