@@ -77,6 +77,12 @@ AUTO_RUN_MIGRATIONS=false
 LLM_RECEIPT_PROMPT_PATH=prompts/receipt_prompt.txt
 ```
 
+## Unittest
+
+```bash
+python -m unittest discover -s tests -p "test_*.py"
+```
+
 ## Development notes
 
 - Database migrations are handled with Alembic. Use `alembic revision --autogenerate -m "message"` to create new migrations when models change.

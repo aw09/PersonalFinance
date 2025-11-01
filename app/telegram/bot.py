@@ -5,6 +5,7 @@ import contextlib
 import logging
 from datetime import date
 from decimal import Decimal
+from io import BytesIO
 from typing import Any
 
 import httpx
@@ -28,7 +29,10 @@ class FinanceApiClient:
     """HTTP client that forwards Telegram entries to the FastAPI backend."""
 
     def __init__(self, base_url: str) -> None:
-        self.client = httpx.AsyncClient(base_url=base_url, timeout=10)
+        self.client = httpx.AsyncClient(
+            base_url=base_url,
+            timeout=httpx.Timeout(timeout=60.0, connect=10.0),
+        )
 
     async def ensure_user(self, telegram_id: int, full_name: str | None) -> dict[str, Any]:
         response = await self.client.get(f"/api/users/by-telegram/{telegram_id}")
@@ -42,6 +46,22 @@ class FinanceApiClient:
 
     async def create_transaction(self, payload: dict[str, Any]) -> dict[str, Any]:
         response = await self.client.post("/api/transactions", json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    async def parse_receipt(
+        self,
+        image_bytes: bytes,
+        *,
+        user_id: str,
+        commit_transaction: bool = True,
+    ) -> dict[str, Any]:
+        files = {"file": ("receipt.jpg", image_bytes, "image/jpeg")}
+        data = {
+            "user_id": user_id,
+            "commit_transaction": "true" if commit_transaction else "false",
+        }
+        response = await self.client.post("/api/llm/receipt", data=data, files=files)
         response.raise_for_status()
         return response.json()
 
@@ -90,6 +110,59 @@ async def free_text_transaction(update: Update, context: ContextTypes.DEFAULT_TY
     else:
         tx_type, amount_raw, description = parts
     await _create_transaction(update, context, tx_type, amount_raw, description)
+
+
+async def receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    if not update.message.photo:
+        await update.message.reply_text("Send a photo to extract a receipt.")
+        return
+
+    tele_user = update.effective_user
+    if tele_user is None:
+        await update.message.reply_text("Could not determine your Telegram user.")
+        return
+
+    status_message = await update.message.reply_text("Processing receipt…")
+
+    photo = update.message.photo[-1]
+    try:
+        file = await photo.get_file()
+        buffer = BytesIO()
+        await file.download_to_memory(out=buffer)
+        buffer.seek(0)
+        image_bytes = buffer.getvalue()
+    except Exception:
+        logger.exception("Failed to download photo from Telegram")
+        await status_message.edit_text("Could not download your photo. Please try again.")
+        return
+
+    api_client: FinanceApiClient = context.application.bot_data["api_client"]
+    try:
+        user = await api_client.ensure_user(tele_user.id, tele_user.full_name)
+    except httpx.HTTPStatusError as exc:
+        logger.exception("Failed to ensure Telegram user in backend")
+        await status_message.edit_text(f"User sync error: {exc.response.text}")
+        return
+    except Exception:
+        logger.exception("Failed to ensure Telegram user in backend")
+        await status_message.edit_text("Could not sync your Telegram user with the backend.")
+        return
+
+    try:
+        data = await api_client.parse_receipt(image_bytes, user_id=user["id"])
+    except httpx.HTTPStatusError as exc:
+        await status_message.edit_text(f"Receipt error: {exc.response.text}")
+    except Exception:
+        logger.exception("Failed to parse receipt via API")
+        await status_message.edit_text("Something went wrong while processing the receipt.")
+    else:
+        await status_message.edit_text(
+            f"Receipt saved as {data['type']} of {data['amount']} {data['currency']} "
+            f"for *{data.get('description') or 'no description'}*.",
+            parse_mode=ParseMode.MARKDOWN,
+        )
 
 
 async def _create_transaction(
@@ -157,6 +230,7 @@ def _create_application(token: str, api_client: FinanceApiClient) -> Application
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("add", add))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, free_text_transaction))
+    application.add_handler(MessageHandler(filters.PHOTO, receipt_photo))
     return application
 
 
