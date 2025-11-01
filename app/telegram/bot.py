@@ -6,7 +6,7 @@ import contextlib
 import logging
 import re
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
 from typing import Any
@@ -22,6 +22,8 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ..config import get_settings
 from ..models.transaction import TransactionType
@@ -39,6 +41,15 @@ HELP_TEXT = (
     "- /report [range]: show totals for a period. Examples: /report, /report 1 week, /report mtd, /report ytd.\n"
     "- /help: show this menu again."
 )
+
+try:
+    USER_TIMEZONE = ZoneInfo("Asia/Jakarta")
+except ZoneInfoNotFoundError:
+    USER_TIMEZONE = timezone(timedelta(hours=7))
+
+
+def _local_today() -> date:
+    return datetime.now(USER_TIMEZONE).date()
 
 TYPE_ALIASES: dict[str, str] = {
     "e": TransactionType.EXPENSE.value,
@@ -237,7 +248,7 @@ async def lend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 "description": note or None,
                 "principal_amount": str(amount.quantize(Decimal("0.01"))),
                 "total_installments": 1,
-                "start_date": date.today().isoformat(),
+                "start_date": _local_today().isoformat(),
                 "interest_rate": None,
                 "frequency_months": 1,
                 "user_id": user["id"],
@@ -261,7 +272,7 @@ async def lend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 "currency": "IDR",
                 "description": description,
                 "category": None,
-                "occurred_at": date.today().isoformat(),
+                "occurred_at": _local_today().isoformat(),
                 "source": "telegram",
                 "user_id": user["id"],
             }
@@ -370,7 +381,7 @@ async def repay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 "currency": "IDR",
                 "description": description,
                 "category": None,
-                "occurred_at": date.today().isoformat(),
+                "occurred_at": _local_today().isoformat(),
                 "source": "telegram",
                 "user_id": user["id"],
             }
@@ -402,7 +413,7 @@ async def repay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 updated = await api_client.apply_installment_payment(
                     inst["id"],
                     amount=chunk,
-                    paid_at=date.today(),
+                    paid_at=_local_today(),
                     transaction_id=transaction["id"],
                 )
             except httpx.HTTPStatusError as exc:
@@ -677,7 +688,7 @@ async def _create_transaction(
         "type": tx_type_enum.value,
         "amount": str(amount.quantize(Decimal("0.01"))),
         "description": description,
-        "occurred_at": date.today().isoformat(),
+        "occurred_at": _local_today().isoformat(),
         "currency": "IDR",
         "source": "telegram",
         "user_id": user["id"],
@@ -967,7 +978,7 @@ def _subtract_months(base: date, months: int) -> date:
 
 
 def _parse_report_range(arg: str | None) -> tuple[date, date, str]:
-    today = date.today()
+    today = _local_today()
     if not arg:
         return today, today, "today"
     text = arg.strip().lower()
