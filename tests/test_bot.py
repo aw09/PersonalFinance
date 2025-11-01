@@ -75,7 +75,7 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
         )
         message.reply_text.assert_awaited_once()
         call_args = message.reply_text.await_args
-        self.assertIn("Saved expense of 136000.00 IDR", call_args.args[0])
+        self.assertIn("Saved expense of 136 RB IDR", call_args.args[0])
 
     async def test_receipt_photo_parses_image(self) -> None:
         photo_data = b"fake-image"

@@ -4,7 +4,7 @@ import asyncio
 import contextlib
 import logging
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from io import BytesIO
 from typing import Any
 
@@ -158,8 +158,9 @@ async def receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         logger.exception("Failed to parse receipt via API")
         await status_message.edit_text("Something went wrong while processing the receipt.")
     else:
+        amount_text = _format_amount_for_display(data["amount"], data["currency"])
         await status_message.edit_text(
-            f"Receipt saved as {data['type']} of {data['amount']} {data['currency']} "
+            f"Receipt saved as {data['type']} of {amount_text} "
             f"for *{data.get('description') or 'no description'}*.",
             parse_mode=ParseMode.MARKDOWN,
         )
@@ -212,8 +213,9 @@ async def _create_transaction(
         logger.exception("Failed to create transaction via API")
         await update.message.reply_text("Something went wrong while saving the transaction.")
     else:
+        amount_text = _format_amount_for_display(data["amount"], data["currency"])
         await update.message.reply_text(
-            f"Saved {data['type']} of {data['amount']} {data['currency']} "
+            f"Saved {data['type']} of {amount_text} "
             f"for *{data.get('description') or 'no description'}*.",
             parse_mode=ParseMode.MARKDOWN,
         )
@@ -311,3 +313,33 @@ if __name__ == "__main__":  # pragma: no cover
 
 
 
+def _format_amount_for_display(amount: str | Decimal, currency: str) -> str:
+    """Format amount with thousands separators or local shorthand."""
+    try:
+        value = Decimal(str(amount))
+    except (InvalidOperation, ValueError):
+        return f"{amount} {currency}"
+
+    currency_upper = currency.upper()
+
+    def _trimmed(val: Decimal, places: int = 2) -> str:
+        quantize_target = Decimal(1).scaleb(-places)
+        quantized = val.quantize(quantize_target)
+        text = format(quantized, "f")
+        if "." in text:
+            text = text.rstrip("0").rstrip(".")
+        return text
+
+    if currency_upper == "IDR":
+        if value >= Decimal("1000000"):
+            display_value = value / Decimal("1000000")
+            return f"{_trimmed(display_value, 2)} JT {currency_upper}"
+        if value >= Decimal("1000"):
+            display_value = value / Decimal("1000")
+            places = 1 if display_value >= Decimal("10") else 2
+            return f"{_trimmed(display_value, places)} RB {currency_upper}"
+        if value == value.to_integral():
+            return f"{int(value):,} {currency_upper}"
+        return f"{value:,.2f} {currency_upper}"
+
+    return f"{value:,.2f} {currency_upper}"
