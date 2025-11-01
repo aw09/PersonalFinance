@@ -1,266 +1,99 @@
-# Personal Finance App
+# PersonalFinance
 
-A comprehensive fullstack personal finance management application built with Next.js, Supabase, and Tailwind CSS.
+Dead simple personal finance backend built with FastAPI and PostgreSQL. Features:
+- Record transactions for expense, income, debts, and receivables
+- Track debt agreements, including their installment schedules
+- Accept receipt images and use Google's Gemini LLM to extract structured transactions (no manual OCR needed)
+- Optional Telegram bot interface for logging transactions on the go
+- Multi-user aware: transactions and debts belong to users identified by their Telegram account (the bot auto-creates them on first message)
 
-## Features
+## Project layout
 
-### ✅ Implemented
-- [x] User authentication with Supabase Auth
-- [x] Responsive dashboard layout
-- [x] Database schema for comprehensive finance tracking
-- [x] Wallet management (create, view, list)
-- [x] Transaction management (create, view, list)
-- [x] Category support for transactions
-- [x] Multi-currency support
-- [x] Budget management and tracking
-- [x] Basic Telegram bot integration
-- [x] Investment tracking API
-
-### 🚧 In Development  
-- [ ] Loan and credit/receivables management
-- [ ] Installment payment tracking
-- [ ] Advanced investment portfolio features
-- [ ] Scheduled/repeated transactions
-- [ ] Item-level expense tracking for price monitoring
-- [ ] Wallet sharing with other users
-- [ ] Transaction analytics and reporting
-- [ ] LLM-powered chat processing for transactions
-- [ ] Receipt image processing with LLM
-- [ ] Advanced Telegram bot features
-
-## Technology Stack
-
-- **Frontend**: Next.js 14 with App Router, TypeScript, Tailwind CSS
-- **Backend**: Next.js API Routes
-- **Database**: Supabase (PostgreSQL with Row Level Security)
-- **Authentication**: Supabase Auth
-- **UI Components**: Custom components with Tailwind CSS
-- **Icons**: Lucide React
-- **Date Handling**: date-fns
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 18+ and npm
-- Supabase account and project
-
-### Installation
-
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd PersonalFinance
-   ```
-
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Set up environment variables:
-   ```bash
-   cp .env.example .env.local
-   ```
-   
-   Fill in your Supabase credentials and optional services:
-   ```
-   NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-   SUPABASE_SERVICE_ROLE_KEY=your_service_role_key  # Required for Telegram bot
-   TELEGRAM_BOT_TOKEN=your_telegram_bot_token      # Optional: for Telegram integration
-   ```
-
-4. Set up the database:
-   - **Option 1: Using Migration System (Recommended)**
-     ```bash
-     # Start local Supabase instance
-     npm run db start
-     
-     # Apply all migrations
-     npm run db reset
-     ```
-   - **Option 2: Manual Setup**
-     - Go to your Supabase project dashboard
-     - Navigate to the SQL Editor
-     - Run the SQL script from `database/schema.sql`
-
-5. Start the development server:
-   ```bash
-   npm run dev
-   ```
-
-6. Open [http://localhost:3000](http://localhost:3000) in your browser
-
-## Database Management
-
-This application uses Supabase with a comprehensive migration system for database schema management.
-
-### Quick Start with Migrations
-
-```bash
-# Start local development database
-npm run db start
-
-# Apply all migrations and seed data
-npm run db reset
-
-# View database in Supabase Studio
-open http://localhost:54323
+```
+app/
+  api/              # FastAPI routers
+  config.py         # Settings via environment variables
+  db.py             # Database engine and session handling
+  main.py           # FastAPI application entrypoint
+  models/           # SQLAlchemy ORM models
+  schemas/          # Pydantic request/response models
+  services/         # Domain services (transactions, debts, LLM, Telegram helpers)
+  telegram/         # Telegram bot setup and handlers
 ```
 
-### Migration Commands
+## Getting started
+
+1. Create and activate a virtual environment
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # Windows: .venv\Scripts\activate
+   ```
+
+2. Install dependencies
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. Copy `.env.example` to `.env` and update the values for your environment.
+
+4. Apply the database migrations
+   ```bash
+   alembic upgrade head
+   ```
+
+5. Start the API
+   ```bash
+   uvicorn app.main:app --reload
+   ```
+
+   When `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, and `BACKEND_BASE_URL` are set, the bot registers a webhook automatically and begins processing updates through the FastAPI endpoint.
+
+### Docker
+
+You can run the API inside a container:
 
 ```bash
-# Create new migration
-npm run db new add_feature
-
-# Apply pending migrations
-npm run db up
-
-# Check migration status
-npm run db status
-
-# Generate TypeScript types
-npm run db types
+docker build -t personal-finance .
+docker run --rm -p 8000:8000 \
+  -e DATABASE_URL=postgresql+asyncpg://username:password@host:5432/personal_finance \
+  -e GEMINI_API_KEY=your-google-generative-ai-key \
+  -e TELEGRAM_BOT_TOKEN=bot-token-from-botfather \
+  -e TELEGRAM_WEBHOOK_SECRET=choose-a-random-secret \
+  -e BACKEND_BASE_URL=https://your-public-domain.example \
+  personal-finance
 ```
 
-For detailed migration documentation, see [docs/MIGRATIONS.md](docs/MIGRATIONS.md).
+## Environment
 
-## Database Schema
+```env
+DATABASE_URL=postgresql+asyncpg://username:password@localhost:5432/personal_finance
+DIRECT_DATABASE_URL=postgresql://username:password@localhost:5432/personal_finance
+GEMINI_API_KEY=your-google-generative-ai-key
+TELEGRAM_BOT_TOKEN=bot-token-from-botfather
+TELEGRAM_WEBHOOK_SECRET=choose-a-random-secret
+TELEGRAM_REGISTER_WEBHOOK_ON_START=false
+BACKEND_BASE_URL=https://your-public-domain.example
+AUTO_RUN_MIGRATIONS=false
+LLM_RECEIPT_PROMPT_PATH=prompts/receipt_prompt.txt
+```
 
-The application uses a comprehensive database schema that includes:
+## Unittest
 
-- **Profiles**: User profile information
-- **Wallets**: Multiple wallets with sharing capabilities
-- **Categories**: Customizable transaction categories
-- **Transactions**: Income, expense, and transfer records
-- **Transaction Items**: Individual items within transactions
-- **Budgets**: Period-based budget tracking
-- **Loans**: Loan and credit management
-- **Installments**: Payment scheduling for loans
-- **Investments**: Investment portfolio tracking
-- **Scheduled Transactions**: Recurring transaction automation
+```bash
+python -m unittest discover -s tests -p "test_*.py"
+```
 
-All tables implement Row Level Security (RLS) for data protection.
+## Development notes
 
-## Development Roadmap
+- Database migrations are handled with Alembic. Use `alembic revision --autogenerate -m "message"` to create new migrations when models change.
+- Supply `DIRECT_DATABASE_URL` when your primary `DATABASE_URL` points to a connection pooler that restricts migrations (e.g., Supabase session pooler). The app will use the main URL for runtime and the direct URL for Alembic.
+- The Gemini integration expects receipt images as bytes (e.g. via multipart upload). It sends the raw image to the API and prompts Gemini for structured JSON. Inspect `app/services/llm.py` for details and safeguards.
+- The Telegram bot runs in webhook mode via `POST /api/telegram/webhook/{TELEGRAM_WEBHOOK_SECRET}`. Ensure `BACKEND_BASE_URL` points to a publicly reachable HTTPS endpoint before enabling it.
+- `AUTO_RUN_MIGRATIONS=false` skips the Alembic upgrade on startup; helpful if you prefer manual migrations.
+- Users created from Telegram chats (via their `from.id`) are auto-provisioned; you can also manage them explicitly through `/api/users`.
 
-### Phase 1: Core Financial Management ✅
-- [x] Authentication system
-- [x] Database schema design
-- [x] Basic dashboard layout
+## Next steps
 
-### Phase 2: Transaction Management ✅
-- [x] Wallet CRUD operations
-- [x] Transaction creation and management
-- [x] Category management
-- [x] Multi-currency support
-
-### Phase 3: Advanced Financial Features
-- [ ] Budget creation and tracking
-- [ ] Loan and installment management
-- [ ] Investment portfolio tracking
-- [ ] Scheduled transactions
-- [ ] Transaction analytics and insights
-
-### Phase 4: Automation & Integration
-- [ ] Telegram bot integration
-- [ ] LLM-powered transaction processing
-- [ ] Receipt image processing
-- [ ] Advanced analytics and insights
-
-### Phase 5: Deployment & Scaling
-- [ ] Railway.app deployment configuration
-- [ ] Performance optimization
-- [ ] Mobile app consideration
-
-## API Routes
-
-- `GET /auth/callback` - Supabase authentication callback
-- `GET /api/wallets` - List user's wallets
-- `POST /api/wallets` - Create a new wallet
-- `GET /api/categories` - List user's categories
-- `POST /api/categories` - Create a new category
-- `GET /api/transactions` - List transactions (with optional wallet filter)
-- `POST /api/transactions` - Create a new transaction
-- `GET /api/budgets` - List user's budgets
-- `POST /api/budgets` - Create a new budget
-- `GET /api/investments` - List user's investments
-- `POST /api/investments` - Create a new investment
-- `POST /api/telegram/webhook` - Telegram bot webhook endpoint
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## Environment Variables
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL | Yes |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous key | Yes |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (required for Telegram bot) | Yes for Telegram |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot token from @BotFather | Yes for Telegram |
-| `OPENAI_API_KEY` | OpenAI API key for LLM features | Optional |
-
-### Telegram Bot Setup
-To enable Telegram integration:
-1. Create a bot via @BotFather on Telegram
-2. Get your bot token and add it to `TELEGRAM_BOT_TOKEN`
-3. Get your Supabase service role key from your project settings
-4. Run the database migrations to create the required tables
-5. Use the "Link Telegram" button in your dashboard to connect your account
-
-## Deployment
-
-### Railway.app (Recommended)
-1. Connect your GitHub repository to Railway
-2. Set environment variables in Railway dashboard
-3. Deploy automatically on push to main branch
-
-### Docker Deployment
-1. Create a `.env` file with your environment variables:
-   ```
-   NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-   ```
-
-2. Build and run with Docker:
-   ```bash
-   # Linux/Mac
-   ./scripts/docker-local.sh
-   
-   # Windows PowerShell
-   ./scripts/docker-local.ps1
-   ```
-
-   Or manually:
-   ```bash
-   # Build with build arguments
-   docker build \
-     --build-arg NEXT_PUBLIC_SUPABASE_URL=your-supabase-url \
-     --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key \
-     -t personal-finance .
-     
-   # Run with runtime environment variables
-   docker run -p 3000:3000 --env-file .env personal-finance
-   ```
-
-### Other Platforms
-The app can be deployed on any platform that supports Next.js:
-- Vercel
-- Netlify
-- Heroku
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Support
-
-For questions and support, please open an issue in the GitHub repository.
+- Wire up authentication if you need multi-user support.
+- Expand Telegram flows (e.g., inline keyboards for marking installments as paid).
+- Add reporting endpoints (monthly summaries, category breakdowns, etc.).
