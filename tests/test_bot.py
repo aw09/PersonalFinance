@@ -78,6 +78,31 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
         call_args = message.reply_text.await_args
         self.assertIn("Saved expense of 136 K IDR", call_args.args[0])
 
+    async def test_free_text_quick_entry_shorthand(self) -> None:
+        message = DummyMessage("e indomaret 50000")
+        update = SimpleNamespace(
+            message=message,
+            effective_user=SimpleNamespace(id=528101001, full_name="Faris Tester"),
+        )
+        api_client = AsyncMock()
+        api_client.ensure_user.return_value = {"id": str(UUID("11111111-2222-3333-4444-555555555555"))}
+        api_client.create_transaction.return_value = {
+            "type": "expense",
+            "amount": "50000.00",
+            "currency": "IDR",
+            "description": "indomaret",
+            "source": "telegram",
+        }
+        context = SimpleNamespace(application=SimpleNamespace(bot_data={"api_client": api_client}))
+
+        await bot.free_text_transaction(update, context)
+
+        api_client.ensure_user.assert_awaited_once()
+        api_client.create_transaction.assert_awaited_once()
+        payload = api_client.create_transaction.await_args.args[0]
+        self.assertEqual(payload["type"], "expense")
+        self.assertEqual(payload["description"], "indomaret")
+
     async def test_receipt_photo_parses_image(self) -> None:
         photo_data = b"fake-image"
         message = DummyMessage(photo=[DummyPhoto(photo_data)])
@@ -123,6 +148,7 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
         help_text = message.reply_text.await_args.args[0]
         self.assertIn("/report", help_text)
         self.assertIn("receipt", help_text.lower())
+        self.assertIn("shorthand", help_text.lower())
 
     async def test_report_command_generates_summary(self) -> None:
         today = bot.date.today()

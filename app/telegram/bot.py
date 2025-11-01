@@ -31,11 +31,25 @@ logger = logging.getLogger(__name__)
 HELP_TEXT = (
     "Here is what I can do:\n"
     "- /add <type> <amount> <description>: record a transaction (types: expense, income, debt, receivable).\n"
-    "- Send plain text like \"expense 12000 lunch\" for quick capture.\n"
+    '- Send plain text like "expense 12000 lunch" or shorthand "e lunch 12000".\n'
     "- Send a receipt photo to extract items automatically.\n"
     "- /report [range]: show totals for a period. Examples: /report, /report 1 week, /report mtd, /report ytd.\n"
     "- /help: show this menu again."
 )
+
+TYPE_ALIASES: dict[str, str] = {
+    "e": TransactionType.EXPENSE.value,
+    "exp": TransactionType.EXPENSE.value,
+    "expense": TransactionType.EXPENSE.value,
+    "i": TransactionType.INCOME.value,
+    "inc": TransactionType.INCOME.value,
+    "income": TransactionType.INCOME.value,
+    "d": TransactionType.DEBT.value,
+    "debt": TransactionType.DEBT.value,
+    "r": TransactionType.RECEIVABLE.value,
+    "rec": TransactionType.RECEIVABLE.value,
+    "receivable": TransactionType.RECEIVABLE.value,
+}
 
 
 class FinanceApiClient:
@@ -130,18 +144,15 @@ async def add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def free_text_transaction(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
         return
-    parts = update.message.text.split(maxsplit=2)
-    if len(parts) < 2:
+    text = update.message.text or ""
+    try:
+        tx_type, amount, description = _parse_quick_entry(text)
+    except ValueError as exc:
         await update.message.reply_text(
-            "Try `income 100 Salary` or `/add expense 12 lunch`."
+            f"{exc}\nTry `expense lunch 12000` or shorthand `e lunch 12000`."
         )
         return
-    if len(parts) == 2:
-        tx_type, amount_raw = parts
-        description = "Quick entry"
-    else:
-        tx_type, amount_raw, description = parts
-    await _create_transaction(update, context, tx_type, amount_raw, description)
+    await _create_transaction(update, context, tx_type, amount, description)
 
 
 async def report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -240,17 +251,48 @@ async def receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
 
 
+def _parse_quick_entry(text: str) -> tuple[TransactionType, Decimal, str]:
+    tokens = text.strip().split()
+    if len(tokens) < 2:
+        raise ValueError("Provide at least a type and amount, e.g. `e lunch 12000`.")
+    tx_type = _resolve_transaction_type(tokens[0])
+    amount_value: Decimal | None = None
+    amount_index: int | None = None
+    for idx in range(len(tokens) - 1, 0, -1):
+        candidate = tokens[idx].replace(",", "")
+        try:
+            amount_value = Decimal(candidate)
+            amount_index = idx
+            break
+        except (InvalidOperation, ValueError):
+            continue
+    if amount_value is None or amount_index is None:
+        raise ValueError("Could not find an amount in your message.")
+    description_tokens = tokens[1:amount_index] + tokens[amount_index + 1 :]
+    description = " ".join(description_tokens).strip() or "Quick entry"
+    return tx_type, amount_value, description
+
+
 async def _create_transaction(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
-    tx_type: str,
-    amount_raw: str,
+    tx_type: TransactionType | str,
+    amount_raw: Decimal | str,
     description: str,
 ) -> None:
+    if isinstance(amount_raw, Decimal):
+        amount = amount_raw
+    else:
+        try:
+            amount = Decimal(str(amount_raw))
+        except Exception:
+            await update.message.reply_text(f"Invalid amount `{amount_raw}`.")
+            return
+
     try:
-        amount = Decimal(amount_raw)
-    except Exception:
-        await update.message.reply_text(f"Invalid amount `{amount_raw}`.")
+        tx_type_enum = _resolve_transaction_type(tx_type)
+    except ValueError as exc:
+        await update.message.reply_text(str(exc))
         return
 
     api_client: FinanceApiClient = context.application.bot_data["api_client"]
@@ -271,7 +313,7 @@ async def _create_transaction(
         return
 
     payload = {
-        "type": tx_type.lower(),
+        "type": tx_type_enum.value,
         "amount": str(amount.quantize(Decimal("0.01"))),
         "description": description,
         "occurred_at": date.today().isoformat(),
@@ -397,6 +439,16 @@ if __name__ == "__main__":  # pragma: no cover
     asyncio.run(main())
 
 
+
+
+def _resolve_transaction_type(raw: str | TransactionType) -> TransactionType:
+    if isinstance(raw, TransactionType):
+        return raw
+    try:
+        normalised = TYPE_ALIASES.get(raw.lower(), raw.lower())
+        return TransactionType(normalised)
+    except Exception as exc:
+        raise ValueError(f"Unsupported transaction type '{raw}'.") from exc
 
 
 def _format_amount_for_display(amount: str | Decimal, currency: str) -> str:
