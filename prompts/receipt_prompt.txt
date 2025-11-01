@@ -7,7 +7,7 @@ Return JSON with this exact shape:
     "description": "...",
     "category": "...",
     "amount": 12.34,
-    "currency": "USD",
+    "currency": "IDR",
     "occurred_at": "YYYY-MM-DD"
   },
   "items": [

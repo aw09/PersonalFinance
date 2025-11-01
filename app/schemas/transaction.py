@@ -25,7 +25,7 @@ class TransactionCreate(BaseModel):
 
     type: TransactionType
     amount: Decimal
-    currency: str = Field(default="USD", min_length=3, max_length=3)
+    currency: str = Field(default="IDR", min_length=3, max_length=3)
     description: Optional[str] = Field(default=None, max_length=512)
     category: Optional[str] = Field(default=None, max_length=64)
     occurred_at: date

@@ -46,7 +46,7 @@ def _parse_transaction_payload(payload: dict, *, user_id: UUID) -> TransactionCr
     return TransactionCreate(
         type=tx_type,
         amount=Decimal(str(transaction_data.get("amount", 0))),
-        currency=transaction_data.get("currency", "USD"),
+        currency=transaction_data.get("currency", "IDR"),
         description=transaction_data.get("description"),
         category=transaction_data.get("category"),
         occurred_at=occurred_at,

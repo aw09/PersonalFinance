@@ -34,8 +34,13 @@ async def create_transaction(
     payload: TransactionCreate,
 ) -> Transaction:
     """Persist a new transaction."""
+    tx_type = (
+        payload.type
+        if isinstance(payload.type, TransactionType)
+        else TransactionType(str(payload.type).lower())
+    )
     transaction = Transaction(
-        type=payload.type,
+        type=tx_type,
         amount=payload.amount,
         currency=payload.currency,
         description=payload.description,

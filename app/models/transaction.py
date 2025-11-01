@@ -27,8 +27,11 @@ class Transaction(Base):
 
     occurred_at: Mapped[date] = mapped_column(Date, nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
-    currency: Mapped[str] = mapped_column(String(3), default="USD", nullable=False)
-    type: Mapped[TransactionType] = mapped_column(SqlEnum(TransactionType), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), default="IDR", nullable=False)
+    type: Mapped[TransactionType] = mapped_column(
+        SqlEnum(TransactionType, values_callable=lambda enum: [member.value for member in enum]),
+        nullable=False,
+    )
     description: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     category: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     source: Mapped[str] = mapped_column(String(32), default="manual", nullable=False)

@@ -127,7 +127,7 @@ async def _create_transaction(
         "amount": str(amount.quantize(Decimal("0.01"))),
         "description": description,
         "occurred_at": date.today().isoformat(),
-        "currency": "USD",
+        "currency": "IDR",
         "source": "telegram",
         "user_id": user["id"],
     }
@@ -185,7 +185,8 @@ async def init_bot() -> None:
             await application.initialize()
             await application.start()
             if settings.telegram_register_webhook_on_start:
-                await application.bot.set_webhook(url=webhook_url, drop_pending_updates=True)
+                await application.bot.set_webhook(url=webhook_url, drop_pending_updates=False)
+                logger
         except Exception:
             logger.exception("Failed to initialise Telegram webhook; bot disabled for this run.")
             with contextlib.suppress(Exception):
