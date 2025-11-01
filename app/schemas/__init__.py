@@ -1,5 +1,6 @@
 from .debt import (
     DebtCreate,
+    DebtInstallmentPaymentRead,
     DebtInstallmentRead,
     DebtRead,
     DebtUpdate,
@@ -22,6 +23,7 @@ __all__ = [
     "DebtRead",
     "DebtUpdate",
     "DebtInstallmentRead",
+    "DebtInstallmentPaymentRead",
     "InstallmentPaymentRequest",
     "UserCreate",
     "UserRead",

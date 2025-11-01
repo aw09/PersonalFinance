@@ -6,9 +6,10 @@ from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models.debt import Debt, DebtInstallment
+from ..models.debt import Debt, DebtInstallment, DebtInstallmentPayment
 from ..schemas.debt import DebtCreate, DebtUpdate, InstallmentPaymentRequest
 
 
@@ -52,16 +53,30 @@ async def create_debt(session: AsyncSession, payload: DebtCreate) -> Debt:
                 installment_number=n + 1,
                 due_date=due_date,
                 amount=base_amount,
+                paid_amount=Decimal("0"),
             )
         )
     session.add_all(installments)
     await session.commit()
-    await session.refresh(debt)
-    return debt
+
+    result = await session.execute(
+        select(Debt)
+        .options(
+            selectinload(Debt.installments).selectinload(DebtInstallment.payments)
+        )
+        .where(Debt.id == debt.id)
+    )
+    return result.scalar_one()
 
 
 async def list_debts(session: AsyncSession, *, user_id: Optional[UUID] = None) -> list[Debt]:
-    stmt = select(Debt).order_by(Debt.created_at.desc())
+    stmt = (
+        select(Debt)
+        .options(
+            selectinload(Debt.installments).selectinload(DebtInstallment.payments)
+        )
+        .order_by(Debt.created_at.desc())
+    )
     if user_id:
         stmt = stmt.where(Debt.user_id == user_id)
     result = await session.execute(stmt)
@@ -87,11 +102,35 @@ async def mark_installment_paid(
     installment: DebtInstallment,
     payload: InstallmentPaymentRequest,
 ) -> DebtInstallment:
-    installment.paid = True
-    installment.paid_at = payload.paid_at
-    installment.transaction_id = payload.transaction_id
+    current_amount = Decimal(str(installment.amount))
+    paid_amount_so_far = Decimal(str(installment.paid_amount or 0))
+    payment_amount = Decimal(str(payload.amount)) if payload.amount is not None else current_amount
+    if payment_amount <= 0:
+        raise ValueError("Payment amount must be greater than zero.")
+
+    new_paid_total = paid_amount_so_far + payment_amount
+    capped_total = min(new_paid_total, current_amount)
+    fully_paid = capped_total >= current_amount
+
+    payment = DebtInstallmentPayment(
+        installment_id=installment.id,
+        amount=payment_amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
+        paid_at=payload.paid_at,
+        transaction_id=payload.transaction_id,
+    )
+    session.add(payment)
+
+    installment.paid_amount = capped_total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    if fully_paid:
+        installment.paid = True
+        installment.paid_at = payload.paid_at
+        installment.transaction_id = payload.transaction_id
+    else:
+        installment.paid = False
+        installment.paid_at = None
+        installment.transaction_id = payload.transaction_id
     await session.commit()
-    await session.refresh(installment)
+    await session.refresh(installment, attribute_names=["payments"])
     return installment
 
 

@@ -1,5 +1,5 @@
 from .base import Base
-from .debt import Debt, DebtInstallment
+from .debt import Debt, DebtInstallment, DebtInstallmentPayment
 from .transaction import Transaction, TransactionType
 from .user import User
 
@@ -9,5 +9,6 @@ __all__ = [
     "TransactionType",
     "Debt",
     "DebtInstallment",
+    "DebtInstallmentPayment",
     "User",
 ]

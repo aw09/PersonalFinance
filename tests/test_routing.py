@@ -53,11 +53,23 @@ def build_installment_payload(debt_id: UUID, *, paid: bool = False) -> dict:
         "installment_number": 1,
         "due_date": date(2024, 2, 1),
         "amount": Decimal("100.00"),
+        "paid_amount": Decimal("100.00") if paid else Decimal("0"),
         "paid": paid,
         "paid_at": date.today() if paid else None,
         "transaction_id": None,
         "created_at": now,
         "updated_at": now,
+        "payments": [
+            {
+                "id": uuid4(),
+                "installment_id": debt_id,
+                "amount": Decimal("100.00"),
+                "paid_at": date.today() if paid else date(1970, 1, 1),
+                "transaction_id": None,
+                "created_at": now,
+                "updated_at": now,
+            }
+        ] if paid else [],
     }
 
 
@@ -239,6 +251,18 @@ class RoutingTests(unittest.TestCase):
             **self.installment,
             "paid": True,
             "paid_at": date.today(),
+            "paid_amount": Decimal("100.00"),
+            "payments": [
+                {
+                    "id": uuid4(),
+                    "installment_id": self.installment["id"],
+                    "amount": Decimal("100.00"),
+                    "paid_at": date.today(),
+                    "transaction_id": None,
+                    "created_at": datetime.utcnow(),
+                    "updated_at": datetime.utcnow(),
+                }
+            ],
         }
 
         self.create_transaction_mock.return_value = self.transaction

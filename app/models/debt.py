@@ -42,6 +42,7 @@ class DebtInstallment(Base):
     installment_number: Mapped[int] = mapped_column(Integer, nullable=False)
     due_date: Mapped[date] = mapped_column(Date, nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    paid_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0"), nullable=False)
     paid: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     paid_at: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     transaction_id: Mapped[Optional[UUID]] = mapped_column(
@@ -50,6 +51,27 @@ class DebtInstallment(Base):
 
     debt: Mapped[Debt] = relationship(back_populates="installments")
     transaction: Mapped[Optional["Transaction"]] = relationship(back_populates="debt_installment")
+    payments: Mapped[list["DebtInstallmentPayment"]] = relationship(
+        back_populates="installment", cascade="all, delete-orphan"
+    )
+
+
+class DebtInstallmentPayment(Base):
+    """Record of a single payment applied to an installment."""
+
+    __tablename__ = "debt_installment_payments"
+
+    installment_id: Mapped[UUID] = mapped_column(
+        ForeignKey("debt_installments.id", ondelete="CASCADE"), nullable=False
+    )
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    paid_at: Mapped[date] = mapped_column(Date, nullable=False)
+    transaction_id: Mapped[Optional[UUID]] = mapped_column(
+        ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True
+    )
+
+    installment: Mapped["DebtInstallment"] = relationship(back_populates="payments")
+    transaction: Mapped[Optional["Transaction"]] = relationship()
 
 
 from .transaction import Transaction  # noqa: E402  # avoid circular import during definition

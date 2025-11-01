@@ -66,5 +66,8 @@ async def mark_installment_paid_endpoint(
     installment = await get_installment(session, installment_id)
     if not installment:
         raise HTTPException(status_code=404, detail="Installment not found")
-    installment = await mark_installment_paid(session, installment, payload)
+    try:
+        installment = await mark_installment_paid(session, installment, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return DebtInstallmentRead.model_validate(installment)
