@@ -58,9 +58,9 @@ TYPE_ALIASES: dict[str, str] = {
 class FinanceApiClient:
     """HTTP client that forwards Telegram entries to the FastAPI backend."""
 
-    def __init__(self, base_url: str) -> None:
+    def __init__(self, api_base_url: str) -> None:
         self.client = httpx.AsyncClient(
-            base_url=base_url,
+            base_url=api_base_url,
             timeout=httpx.Timeout(timeout=60.0, connect=10.0),
         )
 
@@ -731,12 +731,14 @@ async def init_bot() -> None:
     base_url = str(settings.backend_base_url)
     webhook_url = base_url.rstrip("/") + f"/api/telegram/webhook/{settings.telegram_webhook_secret}"
 
+    api_base_url = str(settings.internal_backend_base_url or settings.backend_base_url)
+
     async with _lock:
         global _application, _api_client
         if _application is not None:
             return
 
-        api_client = FinanceApiClient(base_url)
+        api_client = FinanceApiClient(api_base_url)
         application = _create_application(settings.telegram_bot_token, api_client)
 
         try:

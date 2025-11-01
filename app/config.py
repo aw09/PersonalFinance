@@ -32,6 +32,11 @@ class Settings(BaseSettings):
         alias="BACKEND_BASE_URL",
         description="The public URL where FastAPI is reachable (used by Telegram webhooks).",
     )
+    internal_backend_base_url: Optional[AnyHttpUrl] = Field(
+        default=None,
+        alias="INTERNAL_BACKEND_BASE_URL",
+        description="Internal URL used by services to avoid egress charges; falls back to BACKEND_BASE_URL.",
+    )
     telegram_register_webhook_on_start: bool = Field(
         default=False, alias="TELEGRAM_REGISTER_WEBHOOK_ON_START"
     )
