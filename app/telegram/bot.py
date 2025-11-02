@@ -65,6 +65,8 @@ TYPE_ALIASES: dict[str, str] = {
     "receivable": TransactionType.RECEIVABLE.value,
 }
 
+ALLOWED_UPDATES = ["message", "callback_query"]
+
 
 class FinanceApiClient:
     """HTTP client that forwards Telegram entries to the FastAPI backend."""
@@ -770,7 +772,7 @@ async def init_bot() -> None:
             except Exception:
                 logger.exception("Failed to set Telegram command list.")
             if settings.telegram_register_webhook_on_start:
-                await application.bot.set_webhook(url=webhook_url, drop_pending_updates=False)
+                await application.bot.set_webhook(url=webhook_url, drop_pending_updates=False, allowed_updates=ALLOWED_UPDATES)
         except Exception:
             logger.exception("Failed to initialise Telegram webhook; bot disabled for this run.")
             with contextlib.suppress(Exception):
@@ -1093,3 +1095,4 @@ def _build_report_summary(
         lines.append(f"- Count: {counts[currency]}")
 
     return "\n".join(lines)
+
