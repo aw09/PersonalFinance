@@ -86,8 +86,13 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
             "description": "Sekala",
             "source": "telegram",
         }
+        api_client.list_wallets.return_value = []
 
-        context = SimpleNamespace(application=SimpleNamespace(bot_data={"api_client": api_client}))
+        context = SimpleNamespace(
+            application=SimpleNamespace(bot_data={"api_client": api_client}),
+            args=["expense", "136000", "Sekala"],
+            user_data={},
+        )
 
         await bot.add(update, context)
 
@@ -127,7 +132,11 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
             "description": "indomaret",
             "source": "telegram",
         }
-        context = SimpleNamespace(application=SimpleNamespace(bot_data={"api_client": api_client}))
+        api_client.list_wallets.return_value = []
+        context = SimpleNamespace(
+            application=SimpleNamespace(bot_data={"api_client": api_client}),
+            user_data={},
+        )
 
         await bot.free_text_transaction(update, context)
 
@@ -157,7 +166,12 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
             "description": "Receipt import",
         }
 
-        context = SimpleNamespace(application=SimpleNamespace(bot_data={"api_client": api_client}))
+        api_client.list_wallets.return_value = []
+
+        context = SimpleNamespace(
+            application=SimpleNamespace(bot_data={"api_client": api_client}),
+            user_data={},
+        )
 
         await bot.receipt_photo(update, context)
 
@@ -181,6 +195,7 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
         message.reply_text.assert_awaited_once()
         help_text = message.reply_text.await_args.args[0]
         self.assertIn("/report", help_text)
+        self.assertIn("/wallet", help_text)
         self.assertIn("receipt", help_text.lower())
         self.assertIn("shorthand", help_text.lower())
 
@@ -211,6 +226,7 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
             context = SimpleNamespace(
                 application=SimpleNamespace(bot_data={"api_client": api_client}),
                 args=[],
+                user_data={},
             )
 
             await bot.report(update, context)
@@ -253,6 +269,7 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
         context = SimpleNamespace(
             application=SimpleNamespace(bot_data={"api_client": api_client}),
             args=["Adi", "50000"],
+            user_data={},
         )
 
         await bot.lend(update, context)
@@ -312,10 +329,7 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
                 }
             ],
         ]
-        context = SimpleNamespace(
-            application=SimpleNamespace(bot_data={"api_client": api_client}),
-            args=["Adi", "30000"],
-        )
+        context = SimpleNamespace(application=SimpleNamespace(bot_data={"api_client": api_client}), args=["Adi", "30000"], user_data={})
 
         await bot.repay(update, context)
 
@@ -401,6 +415,7 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
         context = SimpleNamespace(
             application=SimpleNamespace(bot_data={"api_client": api_client}),
             args=["Adi", "all"],
+            user_data={},
         )
 
         await bot.repay(update, context)
@@ -458,6 +473,7 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
         context = SimpleNamespace(
             application=SimpleNamespace(bot_data={"api_client": api_client}),
             args=[],
+            user_data={},
         )
 
         await bot.owed(update, context)
@@ -507,8 +523,7 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
         ]
         context = SimpleNamespace(
             application=SimpleNamespace(bot_data={"api_client": api_client}),
-            args=["Adi"],
-        )
+            args=["Adi"], user_data={})
 
         await bot.owed(update, context)
 
@@ -516,3 +531,6 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
         text = "\n"
         text = "\n".join(arg for arg in message.reply_text.await_args.args)
         self.assertIn("Paid 40 K IDR on 2025-11-04", text)
+
+
+

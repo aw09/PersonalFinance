@@ -60,7 +60,7 @@ Every user starts with a “Main Wallet” (type `regular`) that acts as their d
 
 Credit wallets accept optional `credit_limit` and `settlement_day` fields; investment wallets can be adjusted to reflect market value using the `adjust` endpoint.
 
-Transactions created through the API or the Telegram bot automatically attach to the user’s default wallet, so quick-entry flows just work without extra commands.
+Transactions created through the API or the Telegram bot automatically attach to the user's default wallet. Prefix Telegram commands with `@wallet` (for example, `/add @travel expense 150000 flight`) to post directly into a specific wallet without changing the default.
 
 ### Docker
 

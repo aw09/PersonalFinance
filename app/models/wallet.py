@@ -6,6 +6,7 @@ from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import Enum as SqlEnum, ForeignKey, Numeric, String
+from sqlalchemy.types import TypeDecorator
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -16,12 +17,46 @@ class WalletType(str, Enum):
     INVESTMENT = "investment"
     CREDIT = "credit"
 
+    @classmethod
+    def _missing_(cls, value):
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            for member in cls:
+                if member.value == normalized:
+                    return member
+        return None
+
+
+class WalletTypeDb(TypeDecorator):
+    impl = SqlEnum(
+        "regular",
+        "investment",
+        "credit",
+        name="wallettype",
+        create_type=False,
+        native_enum=True,
+    )
+
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if isinstance(value, WalletType):
+            value = value.value
+        return value.lower()
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        return WalletType(value.lower())
+
 
 class Wallet(Base):
     __tablename__ = "wallets"
 
     name: Mapped[str] = mapped_column(String(64), nullable=False)
-    type: Mapped[WalletType] = mapped_column(SqlEnum(WalletType), nullable=False)
+    type: Mapped[WalletType] = mapped_column(WalletTypeDb(), nullable=False)
     balance: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0"), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default="IDR", nullable=False)
     credit_limit: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)

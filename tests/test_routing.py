@@ -150,6 +150,7 @@ class RoutingTests(unittest.TestCase):
         cls._create_wallet_patch = patch("app.api.wallets.create_wallet", new_callable=AsyncMock)
         cls._list_wallets_patch = patch("app.api.wallets.list_wallets", new_callable=AsyncMock)
         cls._get_wallet_patch = patch("app.api.wallets.get_wallet", new_callable=AsyncMock)
+        cls._update_wallet_patch = patch("app.api.wallets.update_wallet", new_callable=AsyncMock)
         cls._wallet_deposit_patch = patch("app.api.wallets.wallet_deposit", new_callable=AsyncMock)
         cls._wallet_withdraw_patch = patch("app.api.wallets.wallet_withdraw", new_callable=AsyncMock)
         cls._wallet_adjust_patch = patch("app.api.wallets.wallet_adjust", new_callable=AsyncMock)
@@ -188,6 +189,7 @@ class RoutingTests(unittest.TestCase):
         cls.create_wallet_mock = cls._create_wallet_patch.start()
         cls.list_wallets_mock = cls._list_wallets_patch.start()
         cls.get_wallet_mock = cls._get_wallet_patch.start()
+        cls.update_wallet_mock = cls._update_wallet_patch.start()
         cls.wallet_deposit_mock = cls._wallet_deposit_patch.start()
         cls.wallet_withdraw_mock = cls._wallet_withdraw_patch.start()
         cls.wallet_adjust_mock = cls._wallet_adjust_patch.start()
@@ -231,6 +233,7 @@ class RoutingTests(unittest.TestCase):
             cls.create_wallet_mock,
             cls.list_wallets_mock,
             cls.get_wallet_mock,
+            cls.update_wallet_mock,
             cls.wallet_deposit_mock,
             cls.wallet_withdraw_mock,
             cls.wallet_adjust_mock,
@@ -262,6 +265,7 @@ class RoutingTests(unittest.TestCase):
             cls._create_wallet_patch,
             cls._list_wallets_patch,
             cls._get_wallet_patch,
+            cls._update_wallet_patch,
             cls._wallet_deposit_patch,
             cls._wallet_withdraw_patch,
             cls._wallet_adjust_patch,
@@ -337,6 +341,7 @@ class RoutingTests(unittest.TestCase):
         self.create_wallet_mock.return_value = self.wallet
         self.list_wallets_mock.return_value = [self.wallet]
         self.get_wallet_mock.return_value = self.wallet
+        self.update_wallet_mock.return_value = self.wallet
         self.wallet_deposit_mock.return_value = None
         self.wallet_withdraw_mock.return_value = None
         self.wallet_adjust_mock.return_value = None
@@ -619,6 +624,15 @@ class RoutingTests(unittest.TestCase):
         body = response.json()
         self.assertTrue(body["is_default"])
         self.assertEqual(body["id"], str(new_wallet_id))
+
+    def test_wallet_update_route(self) -> None:
+        wallet_id = self.wallet["id"]
+        response = self.client.patch(
+            f"/api/wallets/{wallet_id}",
+            json={"name": "Travel", "currency": "USD"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.update_wallet_mock.assert_awaited_once()
 
     def test_wallet_deposit_route(self) -> None:
         amount = "150000.00"

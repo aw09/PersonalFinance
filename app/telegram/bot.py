@@ -39,9 +39,10 @@ HELP_TEXT = (
     "- /repay <name> <amount> [note|all]: track repayments (partial or full) against outstanding debts.\n"
     "- /owed [name]: list who still owes you, including installment and repayment history.\n"
     "- /report [range]: get a summary for today, mtd, ytd, 1 week, 1 month, and other natural ranges.\n"
+    "- /wallet <action>: list wallets, add/edit them, or change the default wallet.\n"
     "- /help: show this menu again.\n"
-    "\nTransactions are stored against your default wallet automatically. Update wallets via the API when you need separated balances "
-    "(regular, investment, or credit)."
+    "\nTransactions are stored in your default wallet automatically. Use `/wallet` to manage wallets "
+    "(regular, investment, credit) and prefix transactions with `@wallet` to target a different one."
 )
 
 try:
@@ -68,6 +69,97 @@ TYPE_ALIASES: dict[str, str] = {
 }
 
 ALLOWED_UPDATES = ["message", "callback_query"]
+WALLET_TYPES = {"regular", "investment", "credit"}
+
+
+def _ensure_user_state(context: ContextTypes.DEFAULT_TYPE) -> dict[str, Any]:
+    user_data = getattr(context, "user_data", None)
+    if user_data is None:
+        user_data = {}
+        setattr(context, "user_data", user_data)
+    return user_data
+
+
+def _normalise_wallet_key(name: str) -> str:
+    return re.sub(r"\s+", " ", name).strip().casefold()
+
+
+def _escape_markdown(text: str) -> str:
+    return text.replace("_", "\\_").replace("*", "\\*")
+
+
+async def _load_wallets(
+    context: ContextTypes.DEFAULT_TYPE,
+    api_client: FinanceApiClient,
+    user_id: str,
+    *,
+    refresh: bool = False,
+) -> list[dict[str, Any]]:
+    user_state = _ensure_user_state(context)
+    cache: dict[str, Any] = user_state.setdefault("wallet_cache", {})
+    if refresh or "list" not in cache:
+        wallets = await api_client.list_wallets(user_id=user_id)
+        cache["list"] = wallets
+        cache["by_id"] = {wallet["id"]: wallet for wallet in wallets if wallet.get("id")}
+        cache["by_name"] = {
+            _normalise_wallet_key(wallet["name"]): wallet
+            for wallet in wallets
+            if wallet.get("name")
+        }
+    return cache.get("list", [])
+
+
+async def _get_wallet_by_name(
+    context: ContextTypes.DEFAULT_TYPE,
+    api_client: FinanceApiClient,
+    user_id: str,
+    wallet_name: str,
+) -> dict[str, Any]:
+    wallets = await _load_wallets(context, api_client, user_id)
+    cache = _ensure_user_state(context).get("wallet_cache", {})
+    by_name = cache.get("by_name", {})
+    key = _normalise_wallet_key(wallet_name)
+    wallet = by_name.get(key)
+    if wallet:
+        return wallet
+    candidates = [w for w in wallets if key in _normalise_wallet_key(w["name"])]
+    if not candidates:
+        raise ValueError(f"Wallet '{wallet_name}' not found. Use /wallet to see available wallets.")
+    if len(candidates) > 1:
+        names = ", ".join(w["name"] for w in candidates)
+        raise ValueError(f"Ambiguous wallet '{wallet_name}'. Matches: {names}")
+    return candidates[0]
+
+
+async def _get_wallet_by_id(
+    context: ContextTypes.DEFAULT_TYPE,
+    api_client: FinanceApiClient,
+    user_id: str,
+    wallet_id: str,
+) -> dict[str, Any] | None:
+    cache = _ensure_user_state(context).get("wallet_cache", {})
+    wallet = cache.get("by_id", {}).get(wallet_id) if cache else None
+    if wallet:
+        return wallet
+    wallets = await _load_wallets(context, api_client, user_id, refresh=True)
+    for item in wallets:
+        if item.get("id") == wallet_id:
+            return item
+    return None
+
+
+def _parse_wallet_options(tokens: list[str]) -> dict[str, str]:
+    options: dict[str, str] = {}
+    for token in tokens:
+        if "=" not in token:
+            continue
+        key, value = token.split("=", 1)
+        options[key.strip().lower()] = value.strip()
+    return options
+
+
+def _parse_bool_flag(value: str) -> bool:
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 class FinanceApiClient:
@@ -123,6 +215,26 @@ class FinanceApiClient:
         response.raise_for_status()
         return response.json()
 
+    async def list_wallets(self, *, user_id: str) -> list[dict[str, Any]]:
+        response = await self.client.get("/api/wallets", params={"user_id": user_id})
+        response.raise_for_status()
+        return response.json()
+
+    async def create_wallet(self, payload: dict[str, Any]) -> dict[str, Any]:
+        response = await self.client.post("/api/wallets", json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    async def update_wallet(self, wallet_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        response = await self.client.patch(f"/api/wallets/{wallet_id}", json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    async def set_default_wallet(self, wallet_id: str) -> dict[str, Any]:
+        response = await self.client.post(f"/api/wallets/{wallet_id}/set-default")
+        response.raise_for_status()
+        return response.json()
+
     async def create_debt(self, payload: dict[str, Any]) -> dict[str, Any]:
         response = await self.client.post("/api/debts", json=payload)
         response.raise_for_status()
@@ -171,7 +283,8 @@ _lock = asyncio.Lock()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "Hi! Send `/add <type> <amount> <description>` to store a transaction.\n"
-        "Types: expense, income, debt, receivable.",
+        "Types: expense, income, debt, receivable.\n"
+        "Prefix with `@wallet` to target a specific wallet (e.g. `/add @travel expense 200 taxi`).",
         parse_mode=ParseMode.MARKDOWN,
     )
 
@@ -185,14 +298,35 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
         return
-    args = update.message.text.split(maxsplit=3)
-    if len(args) < 4:
+    args = list(getattr(context, "args", []) or [])
+    wallet_hint: str | None = None
+    if args and args[0].startswith("@"):
+        wallet_hint = args.pop(0)[1:].strip()
+        if not wallet_hint:
+            await update.message.reply_text(
+                "Provide a wallet name after '@', e.g. `/add @travel expense 12.34 Taxi`.",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            return
+    if len(args) < 3:
         await update.message.reply_text(
-            "Usage: `/add expense 12.34 Grocery shopping`", parse_mode=ParseMode.MARKDOWN
+            "Usage: `/add [@wallet] expense 12.34 Grocery shopping`",
+            parse_mode=ParseMode.MARKDOWN,
         )
         return
-    _, tx_type, amount_raw, description = args
-    await _create_transaction(update, context, tx_type, amount_raw, description)
+    tx_type = args[0]
+    amount_raw = args[1]
+    description = " ".join(args[2:]).strip()
+    if not description:
+        description = "Telegram add"
+    await _create_transaction(
+        update,
+        context,
+        tx_type,
+        amount_raw,
+        description,
+        wallet_hint=wallet_hint,
+    )
 
 
 async def free_text_transaction(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -200,13 +334,21 @@ async def free_text_transaction(update: Update, context: ContextTypes.DEFAULT_TY
         return
     text = update.message.text or ""
     try:
-        tx_type, amount, description = _parse_quick_entry(text)
+        wallet_hint, tx_type, amount, description = _parse_quick_entry(text)
     except ValueError as exc:
         await update.message.reply_text(
-            f"{exc}\nTry `expense lunch 12000` or shorthand `e lunch 12000`."
+            f"{exc}\nTry `expense lunch 12000` or shorthand `e lunch 12000`. "
+            "Prefix with `@wallet` to pick another wallet."
         )
         return
-    await _create_transaction(update, context, tx_type, amount, description)
+    await _create_transaction(
+        update,
+        context,
+        tx_type,
+        amount,
+        description,
+        wallet_hint=wallet_hint,
+    )
 
 
 async def lend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -573,6 +715,246 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(summary)
 
 
+def _format_wallet_overview(wallets: list[dict[str, Any]]) -> str:
+    if not wallets:
+        return (
+            "You do not have any wallets yet. Create one with "
+            "`/wallet add <name> <regular|investment|credit>`."
+        )
+    sorted_wallets = sorted(
+        wallets,
+        key=lambda w: (not w.get("is_default", False), w.get("name", "").lower()),
+    )
+    lines = ["Wallets:"]
+    for wallet in sorted_wallets:
+        raw_name = wallet.get("name", "Unnamed")
+        name = _escape_markdown(raw_name)
+        currency = wallet.get("currency", "IDR")
+        wallet_type = wallet.get("type", "unknown")
+        balance_text = _escape_markdown(
+            _format_amount_for_display(wallet.get("balance", "0"), currency)
+        )
+        default_tag = " (default)" if wallet.get("is_default") else ""
+        parts = f"{name}{default_tag}: {balance_text} ({wallet_type}, {currency})"
+        extras: list[str] = []
+        credit_limit = wallet.get("credit_limit")
+        if credit_limit not in (None, "", 0, "0"):
+            extras.append(
+                f"limit {_format_amount_for_display(credit_limit, currency)}"
+            )
+        settlement_day = wallet.get("settlement_day")
+        if settlement_day:
+            extras.append(f"settles day {settlement_day}")
+        if extras:
+            extras_text = ", ".join(_escape_markdown(item) for item in extras)
+            parts += f" ({extras_text})"
+        lines.append(f"- {parts}")
+    lines.append(
+        "\nPrefix transactions with @wallet to target a non-default wallet, e.g. "
+        "`/add @travel expense 150000 flight`."
+    )
+    return "\n".join(lines)
+
+
+async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    api_client: FinanceApiClient = context.application.bot_data["api_client"]
+    tele_user = update.effective_user
+    if tele_user is None:
+        await update.message.reply_text("Could not determine your Telegram user.")
+        return
+    try:
+        user = await api_client.ensure_user(tele_user.id, tele_user.full_name)
+    except httpx.HTTPStatusError as exc:
+        logger.exception("Failed to ensure Telegram user in backend")
+        await update.message.reply_text(f"User sync error: {exc.response.text}")
+        return
+    except Exception:
+        logger.exception("Failed to ensure Telegram user in backend")
+        await update.message.reply_text("Could not sync your Telegram user with the backend.")
+        return
+
+    args = list(getattr(context, "args", []) or [])
+    if not args or args[0].lower() in {"list", "ls"}:
+        wallets = await _load_wallets(context, api_client, user["id"], refresh=True)
+        overview = _format_wallet_overview(wallets)
+        await update.message.reply_text(overview, parse_mode=ParseMode.MARKDOWN)
+        return
+
+    subcommand = args[0].lower()
+
+    if subcommand == "add":
+        if len(args) < 3:
+            await update.message.reply_text(
+                "Usage: /wallet add <name> <regular|investment|credit> "
+                "[currency=IDR] [limit=100000] [settlement=25] [default=yes|no]"
+            )
+            return
+        name = args[1]
+        wallet_type = args[2].lower()
+        if wallet_type not in WALLET_TYPES:
+            await update.message.reply_text(
+                f"Unknown wallet type '{wallet_type}'. Choose from regular, investment, credit."
+            )
+            return
+        options = _parse_wallet_options(args[3:])
+        currency = options.get("currency", "IDR").upper()
+        if len(currency) != 3:
+            await update.message.reply_text("Currency must be a 3-letter ISO code.")
+            return
+        payload: dict[str, Any] = {
+            "user_id": user["id"],
+            "name": name,
+            "type": wallet_type,
+            "currency": currency,
+        }
+        if "limit" in options:
+            try:
+                limit_value = Decimal(options["limit"])
+                if limit_value < 0:
+                    raise ValueError
+                payload["credit_limit"] = str(limit_value.quantize(Decimal("0.01")))
+            except Exception:
+                await update.message.reply_text("Credit limit must be a positive number.")
+                return
+        if "settlement" in options:
+            try:
+                settlement_day = int(options["settlement"])
+            except ValueError:
+                await update.message.reply_text("Settlement day must be a number between 1 and 31.")
+                return
+            if not 1 <= settlement_day <= 31:
+                await update.message.reply_text("Settlement day must be between 1 and 31.")
+                return
+            payload["settlement_day"] = settlement_day
+        if "default" in options:
+            payload["make_default"] = _parse_bool_flag(options["default"])
+
+        try:
+            wallet = await api_client.create_wallet(payload)
+        except httpx.HTTPStatusError as exc:
+            await update.message.reply_text(f"Could not create wallet: {exc.response.text}")
+            return
+        except Exception:
+            logger.exception("Failed to create wallet via API")
+            await update.message.reply_text("Something went wrong while creating the wallet.")
+            return
+
+        await _load_wallets(context, api_client, user["id"], refresh=True)
+        message = f"Wallet '{wallet['name']}' ({wallet['type']}) created."
+        if wallet.get("is_default"):
+            message += " It is now the default wallet."
+        await update.message.reply_text(message)
+        return
+
+    if subcommand in {"edit", "update"}:
+        if len(args) < 2:
+            await update.message.reply_text(
+                "Usage: /wallet edit <name> [name=new] [currency=...] [limit=...] [settlement=...]"
+            )
+            return
+        target = args[1]
+        options = _parse_wallet_options(args[2:])
+        if not options:
+            await update.message.reply_text(
+                "Provide at least one field to update: name=..., currency=..., limit=..., settlement=..."
+            )
+            return
+        try:
+            wallet_record = await _get_wallet_by_name(context, api_client, user["id"], target)
+        except ValueError as exc:
+            await update.message.reply_text(str(exc))
+            return
+
+        update_payload: dict[str, Any] = {}
+        if "name" in options:
+            update_payload["name"] = options["name"]
+        if "currency" in options:
+            currency = options["currency"].upper()
+            if len(currency) != 3:
+                await update.message.reply_text("Currency must be a 3-letter ISO code.")
+                return
+            update_payload["currency"] = currency
+        if "limit" in options:
+            try:
+                limit_value = Decimal(options["limit"])
+                if limit_value < 0:
+                    raise ValueError
+                update_payload["credit_limit"] = str(limit_value.quantize(Decimal("0.01")))
+            except Exception:
+                await update.message.reply_text("Credit limit must be a positive number.")
+                return
+        if "settlement" in options:
+            try:
+                settlement_day = int(options["settlement"])
+            except ValueError:
+                await update.message.reply_text("Settlement day must be a number between 1 and 31.")
+                return
+            if not 1 <= settlement_day <= 31:
+                await update.message.reply_text("Settlement day must be between 1 and 31.")
+                return
+            update_payload["settlement_day"] = settlement_day
+
+        if not update_payload:
+            await update.message.reply_text("No changes detected.")
+            return
+
+        try:
+            wallet = await api_client.update_wallet(wallet_record["id"], update_payload)
+        except httpx.HTTPStatusError as exc:
+            await update.message.reply_text(f"Could not update wallet: {exc.response.text}")
+            return
+        except Exception:
+            logger.exception("Failed to update wallet via API")
+            await update.message.reply_text("Something went wrong while updating the wallet.")
+            return
+
+        if "default" in options:
+            try:
+                if _parse_bool_flag(options["default"]):
+                    await api_client.set_default_wallet(wallet_record["id"])
+            except Exception:
+                logger.exception("Failed to update default wallet during edit.")
+
+        await _load_wallets(context, api_client, user["id"], refresh=True)
+        await update.message.reply_text(f"Wallet '{wallet.get('name', target)}' updated.")
+        return
+
+    if subcommand in {"default", "set-default"}:
+        if len(args) < 2:
+            await update.message.reply_text("Usage: /wallet default <name>")
+            return
+        target = args[1]
+        try:
+            wallet_record = await _get_wallet_by_name(context, api_client, user["id"], target)
+        except ValueError as exc:
+            await update.message.reply_text(str(exc))
+            return
+        try:
+            await api_client.set_default_wallet(wallet_record["id"])
+        except httpx.HTTPStatusError as exc:
+            await update.message.reply_text(f"Could not set default wallet: {exc.response.text}")
+            return
+        except Exception:
+            logger.exception("Failed to set default wallet")
+            await update.message.reply_text("Something went wrong while updating the default wallet.")
+            return
+        wallets = await _load_wallets(context, api_client, user["id"], refresh=True)
+        default_wallet = next((w for w in wallets if w.get("is_default")), wallet_record)
+        await update.message.reply_text(f"Default wallet set to '{default_wallet['name']}'.")
+        return
+
+    usage = (
+        "Wallet usage:\n"
+        "/wallet add <name> <regular|investment|credit> [currency=IDR] [limit=...] [settlement=day] [default=yes|no]\n"
+        "/wallet edit <name> [name=new] [currency=...] [limit=...] [settlement=day]\n"
+        "/wallet default <name>\n"
+        "/wallet list"
+    )
+    await update.message.reply_text(usage)
+
+
 async def receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
         return
@@ -627,8 +1009,13 @@ async def receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
 
 
-def _parse_quick_entry(text: str) -> tuple[TransactionType, Decimal, str]:
+def _parse_quick_entry(text: str) -> tuple[str | None, TransactionType, Decimal, str]:
     tokens = text.strip().split()
+    wallet_hint: str | None = None
+    if tokens and tokens[0].startswith("@"):
+        wallet_hint = tokens.pop(0)[1:].strip()
+        if not wallet_hint:
+            raise ValueError("Provide a wallet name after '@', e.g. `@travel expense 500`.")
     if len(tokens) < 2:
         raise ValueError("Provide at least a type and amount, e.g. `e lunch 12000`.")
     tx_type = _resolve_transaction_type(tokens[0])
@@ -646,7 +1033,7 @@ def _parse_quick_entry(text: str) -> tuple[TransactionType, Decimal, str]:
         raise ValueError("Could not find an amount in your message.")
     description_tokens = tokens[1:amount_index] + tokens[amount_index + 1 :]
     description = " ".join(description_tokens).strip() or "Quick entry"
-    return tx_type, amount_value, description
+    return wallet_hint, tx_type, amount_value, description
 
 
 async def _create_transaction(
@@ -655,6 +1042,8 @@ async def _create_transaction(
     tx_type: TransactionType | str,
     amount_raw: Decimal | str,
     description: str,
+    *,
+    wallet_hint: str | None = None,
 ) -> None:
     if isinstance(amount_raw, Decimal):
         amount = amount_raw
@@ -688,6 +1077,17 @@ async def _create_transaction(
         await update.message.reply_text("Could not sync your Telegram user with the backend.")
         return
 
+    wallet_record: dict[str, Any] | None = None
+    if wallet_hint:
+        try:
+            wallet_record = await _get_wallet_by_name(context, api_client, user["id"], wallet_hint)
+        except ValueError as exc:
+            await update.message.reply_text(str(exc))
+            return
+        payload_wallet_id = wallet_record.get("id")
+    else:
+        payload_wallet_id = None
+
     payload = {
         "type": tx_type_enum.value,
         "amount": str(amount.quantize(Decimal("0.01"))),
@@ -697,6 +1097,8 @@ async def _create_transaction(
         "source": "telegram",
         "user_id": user["id"],
     }
+    if payload_wallet_id:
+        payload["wallet_id"] = payload_wallet_id
     try:
         data = await api_client.create_transaction(payload)
     except httpx.HTTPStatusError as exc:
@@ -706,11 +1108,19 @@ async def _create_transaction(
         await update.message.reply_text("Something went wrong while saving the transaction.")
     else:
         amount_text = _format_amount_for_display(data["amount"], data["currency"])
-        await update.message.reply_text(
+        wallet_label: str | None = wallet_record["name"] if wallet_record else None
+        wallet_id = data.get("wallet_id")
+        if wallet_id and not wallet_label:
+            wallet_lookup = await _get_wallet_by_id(context, api_client, user["id"], wallet_id)
+            if wallet_lookup:
+                wallet_label = wallet_lookup.get("name")
+        description_text = _escape_markdown(str(data.get("description") or "no description"))
+        wallet_suffix = f" (wallet: {_escape_markdown(wallet_label)})" if wallet_label else ""
+        message_text = (
             f"Saved {data['type']} of {amount_text} "
-            f"for *{data.get('description') or 'no description'}*.",
-            parse_mode=ParseMode.MARKDOWN,
+            f"for *{description_text}*{wallet_suffix}."
         )
+        await update.message.reply_text(message_text, parse_mode=ParseMode.MARKDOWN)
 
 
 def _create_application(token: str, api_client: FinanceApiClient) -> Application:
@@ -728,6 +1138,7 @@ def _create_application(token: str, api_client: FinanceApiClient) -> Application
     application.add_handler(CommandHandler("repay", repay))
     application.add_handler(CommandHandler("owed", owed))
     application.add_handler(CommandHandler("report", report))
+    application.add_handler(CommandHandler(["wallet", "wallets"], wallet_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, free_text_transaction))
     application.add_handler(MessageHandler(filters.PHOTO, receipt_photo))
     return application
@@ -768,6 +1179,7 @@ async def init_bot() -> None:
                         BotCommand("lend", "Record money you lent"),
                         BotCommand("repay", "Record repayment received"),
                         BotCommand("owed", "Show outstanding balances"),
+                        BotCommand("wallet", "Manage wallets"),
                         BotCommand("report", "Show a spending summary"),
                     ]
                 )

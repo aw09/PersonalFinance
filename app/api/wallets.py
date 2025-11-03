@@ -5,13 +5,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
-from ..schemas import WalletCreate, WalletRead, WalletTransactionRequest
+from ..schemas import WalletCreate, WalletRead, WalletTransactionRequest, WalletUpdate
 from ..services import (
     create_wallet,
     get_user,
     get_wallet,
     list_wallets,
     set_default_wallet,
+    update_wallet,
     wallet_adjust,
     wallet_deposit,
     wallet_withdraw,
@@ -85,6 +86,18 @@ def _ensure_wallet(wallet):
     return wallet
 
 
+@router.patch("/{wallet_id}", response_model=WalletRead)
+async def update_wallet_endpoint(
+    wallet_id: UUID,
+    payload: WalletUpdate,
+    session: SessionDep,
+) -> WalletRead:
+    wallet = _ensure_wallet(await get_wallet(session, wallet_id))
+    wallet = await update_wallet(session, wallet, payload)
+    await session.refresh(wallet)
+    return await _wallet_response(session, wallet)
+
+
 @router.post("/{wallet_id}/deposit", response_model=WalletRead)
 async def wallet_deposit_endpoint(
     wallet_id: UUID,
@@ -139,3 +152,5 @@ async def wallet_set_default_endpoint(wallet_id: UUID, session: SessionDep) -> W
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     await session.refresh(wallet)
     return await _wallet_response(session, wallet)
+
+
