@@ -9,6 +9,17 @@ from .debts import (
 from .llm import get_receipt_service
 from .transactions import create_transaction, get_transaction, list_transactions
 from .users import create_user, get_user, get_user_by_telegram_id, list_users
+from .wallets import (
+    create_wallet,
+    ensure_default_wallet,
+    get_wallet,
+    list_wallets,
+    set_default_wallet,
+    update_wallet,
+    wallet_adjust,
+    wallet_deposit,
+    wallet_withdraw,
+)
 
 __all__ = [
     "create_transaction",
@@ -25,4 +36,13 @@ __all__ = [
     "list_users",
     "get_user",
     "get_user_by_telegram_id",
+    "ensure_default_wallet",
+    "create_wallet",
+    "update_wallet",
+    "list_wallets",
+    "get_wallet",
+    "set_default_wallet",
+    "wallet_deposit",
+    "wallet_withdraw",
+    "wallet_adjust",
 ]

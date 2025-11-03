@@ -31,15 +31,17 @@ from ..models.transaction import TransactionType
 logger = logging.getLogger(__name__)
 
 HELP_TEXT = (
-    "Here is what I can do:\n"
-    "- /add <type> <amount> <description>: record a transaction (types: expense, income, debt, receivable).\n"
-    '- Send plain text like "expense 12000 lunch" or shorthand "e lunch 12000".\n'
-    "- Send a receipt photo to extract items automatically.\n"
+    "What I can do:\n"
+    "- /add <type> <amount> <description>: log expense, income, debt, or receivable transactions.\n"
+    '- Send plain text such as "expense 12000 lunch" or shorthand "e lunch 12000" for quick capture.\n'
+    "- Send a receipt photo to extract items and create a transaction automatically.\n"
     "- /lend <name> <amount> [note]: record money you lent to someone.\n"
-    "- /repay <name> <amount> [note]: record money received back.\n"
-    "- /owed [name]: show outstanding balances (optionally filtered by name).\n"
-    "- /report [range]: show totals for a period. Examples: /report, /report 1 week, /report mtd, /report ytd.\n"
-    "- /help: show this menu again."
+    "- /repay <name> <amount> [note|all]: track repayments (partial or full) against outstanding debts.\n"
+    "- /owed [name]: list who still owes you, including installment and repayment history.\n"
+    "- /report [range]: get a summary for today, mtd, ytd, 1 week, 1 month, and other natural ranges.\n"
+    "- /help: show this menu again.\n"
+    "\nTransactions are stored against your default wallet automatically. Update wallets via the API when you need separated balances "
+    "(regular, investment, or credit)."
 )
 
 try:
