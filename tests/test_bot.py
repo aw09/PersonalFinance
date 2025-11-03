@@ -49,9 +49,16 @@ def _make_installment(
 class DummyMessage:
     """Minimal stand-in for a Telegram message used in handlers."""
 
-    def __init__(self, text: str | None = None, photo: list | None = None) -> None:
+    def __init__(
+        self,
+        text: str | None = None,
+        *,
+        photo: list | None = None,
+        caption: str | None = None,
+    ) -> None:
         self.text = text
         self.photo = photo or []
+        self.caption = caption
         self.reply_text = AsyncMock()
 
 
@@ -182,6 +189,7 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
         args, kwargs = api_client.parse_receipt.await_args
         self.assertEqual(args[0], photo_data)
         self.assertEqual(kwargs["user_id"], str(UUID("11111111-2222-3333-4444-555555555555")))
+        self.assertNotIn("wallet_id", kwargs)
         message.reply_text.assert_awaited_once_with("Processing receipt...")
         status_message.edit_text.assert_awaited_once()
         final_text = (
@@ -189,6 +197,51 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
             or status_message.edit_text.await_args.args[0]
         )
         self.assertIn("Receipt saved as expense of 45.67 IDR", final_text)
+
+    async def test_receipt_photo_with_wallet_caption(self) -> None:
+        photo_data = b"fake-image"
+        message = DummyMessage(
+            photo=[DummyPhoto(photo_data)],
+            caption="@travel dinner with team",
+        )
+        status_message = AsyncMock()
+        status_message.edit_text = AsyncMock()
+        message.reply_text.return_value = status_message
+        update = SimpleNamespace(
+            message=message,
+            effective_user=SimpleNamespace(id=528101001, full_name="Faris Tester"),
+        )
+
+        api_client = AsyncMock()
+        api_client.ensure_user.return_value = {"id": str(UUID("11111111-2222-3333-4444-555555555555"))}
+        api_client.parse_receipt.return_value = {
+            "type": "expense",
+            "amount": "75000",
+            "currency": "IDR",
+            "description": "Receipt import",
+            "wallet_id": "w-travel",
+        }
+        api_client.list_wallets.return_value = [
+            {"id": "w-main", "name": "Main Wallet", "is_default": True},
+            {"id": "w-travel", "name": "Travel Fund"},
+        ]
+
+        context = SimpleNamespace(
+            application=SimpleNamespace(bot_data={"api_client": api_client}),
+            user_data={},
+        )
+
+        await bot.receipt_photo(update, context)
+
+        api_client.parse_receipt.assert_awaited_once()
+        _, kwargs = api_client.parse_receipt.await_args
+        self.assertEqual(kwargs["wallet_id"], "w-travel")
+        status_message.edit_text.assert_awaited_once()
+        final_text = (
+            status_message.edit_text.await_args.kwargs.get("text")
+            or status_message.edit_text.await_args.args[0]
+        )
+        self.assertIn("wallet: Travel Fund", final_text)
 
     async def test_help_command_lists_features(self) -> None:
         message = DummyMessage()

@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 HELP_OVERVIEW = (
     "How I can help:\n"
     "\n"
-    "• Quick capture: /add <type> <amount> <description>, free text like \"e lunch 12000\", or send a receipt photo.\n"
+    "• Quick capture: /add <type> <amount> <description>, free text like \"e lunch 12000\", or send a receipt photo (caption with @wallet to choose the wallet).\n"
     "• Wallets: /wallet list, add, edit, default — manage regular, investment, and credit wallets.\n"
     "• Debts & repayments: /lend, /repay, /owed keep track of who owes you and installment schedules.\n"
     "• Reports: /report [range] for summaries, /recent [options] to browse transactions with pagination.\n"
@@ -369,12 +369,15 @@ class FinanceApiClient:
         *,
         user_id: str,
         commit_transaction: bool = True,
+        wallet_id: str | None = None,
     ) -> dict[str, Any]:
         files = {"file": ("receipt.jpg", image_bytes, "image/jpeg")}
         data = {
             "user_id": user_id,
             "commit_transaction": "true" if commit_transaction else "false",
         }
+        if wallet_id:
+            data["wallet_id"] = wallet_id
         response = await self.client.post("/api/llm/receipt", data=data, files=files)
         response.raise_for_status()
         return response.json()
@@ -1304,8 +1307,34 @@ async def receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await status_message.edit_text("Could not sync your Telegram user with the backend.")
         return
 
+    wallet_hint: str | None = None
+    caption = (update.message.caption or "").strip()
+    if caption:
+        for token in caption.split():
+            if token.startswith("@") and len(token) > 1:
+                wallet_hint = token[1:].strip()
+                if wallet_hint:
+                    break
+    wallet_label: str | None = None
+    wallet_id: str | None = None
+    if wallet_hint:
+        try:
+            wallet_record = await _get_wallet_by_name(context, api_client, user["id"], wallet_hint)
+        except ValueError as exc:
+            await status_message.edit_text(str(exc))
+            return
+        wallet_id = wallet_record.get("id")
+        wallet_label = wallet_record.get("name")
+
+    parse_kwargs: dict[str, Any] = {"user_id": user["id"]}
+    if wallet_id:
+        parse_kwargs["wallet_id"] = wallet_id
+
     try:
-        data = await api_client.parse_receipt(image_bytes, user_id=user["id"])
+        data = await api_client.parse_receipt(
+            image_bytes,
+            **parse_kwargs,
+        )
     except httpx.HTTPStatusError as exc:
         await status_message.edit_text(f"Receipt error: {exc.response.text}")
     except Exception:
@@ -1313,9 +1342,14 @@ async def receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await status_message.edit_text("Something went wrong while processing the receipt.")
     else:
         amount_text = _format_amount_for_display(data["amount"], data["currency"])
+        if not wallet_label and data.get("wallet_id"):
+            wallet_lookup = await _get_wallet_by_id(context, api_client, user["id"], data["wallet_id"])
+            if wallet_lookup:
+                wallet_label = wallet_lookup.get("name")
+        wallet_suffix = f" (wallet: {_escape_markdown(wallet_label)})" if wallet_label else ""
         await status_message.edit_text(
             f"Receipt saved as {data['type']} of {amount_text} "
-            f"for *{data.get('description') or 'no description'}*.",
+            f"for *{_escape_markdown(data.get('description') or 'no description')}*{wallet_suffix}.",
             parse_mode=ParseMode.MARKDOWN,
         )
 

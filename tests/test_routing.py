@@ -511,7 +511,22 @@ class RoutingTests(unittest.TestCase):
         response = self.client.post("/api/llm/receipt", data=data, files=files)
         self.assertEqual(response.status_code, 201)
         self.llm_create_transaction_mock.assert_awaited_once()
+        _, tx_payload = self.llm_create_transaction_mock.await_args.args
+        self.assertIsNone(tx_payload.wallet_id)
         self.assertEqual(response.json()["source"], "llm")
+
+    def test_llm_receipt_commit_route_with_wallet(self) -> None:
+        files = {"file": ("receipt.jpg", io.BytesIO(b"fake-bytes"), "image/jpeg")}
+        data = {
+            "commit_transaction": "true",
+            "user_id": str(self.user["id"]),
+            "wallet_id": str(self.wallet["id"]),
+        }
+        response = self.client.post("/api/llm/receipt", data=data, files=files)
+        self.assertEqual(response.status_code, 201)
+        self.llm_create_transaction_mock.assert_awaited_once()
+        _, tx_payload = self.llm_create_transaction_mock.await_args.args
+        self.assertEqual(tx_payload.wallet_id, self.wallet["id"])
 
     def test_telegram_webhook_route(self) -> None:
         payload = {"update_id": 1}

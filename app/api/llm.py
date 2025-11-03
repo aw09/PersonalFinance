@@ -63,6 +63,7 @@ async def parse_receipt_endpoint(
     file: UploadFile = File(...),
     commit_transaction: bool = Form(default=True),
     user_id: UUID = Form(...),
+    wallet_id: UUID | None = Form(default=None),
 ) -> TransactionRead | JSONResponse:
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Only image uploads are supported.")
@@ -72,6 +73,8 @@ async def parse_receipt_endpoint(
     try:
         payload = await service.parse_receipt(image_bytes)
         transaction_payload = _parse_transaction_payload(payload, user_id=user_id)
+        if wallet_id:
+            transaction_payload = transaction_payload.model_copy(update={"wallet_id": wallet_id})
     except ReceiptExtractionError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

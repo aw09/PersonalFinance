@@ -65,7 +65,7 @@ Transactions created through the API or the Telegram bot automatically attach to
 ### Telegram commands
 
 - `/add [type] <amount> <description>` - record an expense, income, debt, or receivable. Supports shorthand such as `e cafe 50000 lunch`.
-- `/receipt` - send a photo to extract a transaction from a receipt using Gemini.
+- `/receipt` - send a photo to extract a transaction from a receipt using Gemini (add `@wallet` in the caption to save into a specific wallet).
 - `/owed [name]` - list outstanding receivables (with optional name filter).
 - `/report [range]` - show summaries for today, mtd, ytd, 1 week, 1 month, etc.
 - `/recent [@wallet] [limit|since|per]` - list the latest transactions with flexible pagination. Use `limit=n` to cap the total rows, `per=n` to change the page size (default 10), and `since=YYYY-MM-DD` to filter by date. Pagination buttons appear automatically when more data is available.
