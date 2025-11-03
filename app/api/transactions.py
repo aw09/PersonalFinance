@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated, Optional
 from uuid import UUID
 
@@ -30,6 +31,9 @@ async def list_transactions_endpoint(
     offset: Annotated[int, Query(ge=0)] = 0,
     transaction_type: Optional[TransactionType] = Query(default=None),
     user_id: Optional[UUID] = Query(default=None),
+    wallet_id: Optional[UUID] = Query(default=None),
+    occurred_after: Optional[date] = Query(default=None),
+    occurred_before: Optional[date] = Query(default=None),
 ) -> list[TransactionRead]:
     transactions = await list_transactions(
         session,
@@ -37,6 +41,9 @@ async def list_transactions_endpoint(
         offset=offset,
         transaction_type=transaction_type,
         user_id=user_id,
+        wallet_id=wallet_id,
+        occurred_after=occurred_after,
+        occurred_before=occurred_before,
     )
     return [TransactionRead.model_validate(tx) for tx in transactions]
 

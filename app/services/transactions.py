@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import date
 from decimal import Decimal
 from typing import Any, Optional
 from uuid import UUID
@@ -95,6 +96,9 @@ async def list_transactions(
     offset: int = 0,
     transaction_type: Optional[TransactionType] = None,
     user_id: Optional[UUID] = None,
+    wallet_id: Optional[UUID] = None,
+    occurred_after: Optional[date] = None,
+    occurred_before: Optional[date] = None,
 ) -> Sequence[Transaction]:
     """Retrieve transactions with optional type filter."""
     stmt: Select[tuple[Transaction]] = select(Transaction).options(selectinload(Transaction.wallet)).order_by(
@@ -104,6 +108,12 @@ async def list_transactions(
         stmt = stmt.where(Transaction.type == transaction_type)
     if user_id:
         stmt = stmt.where(Transaction.user_id == user_id)
+    if wallet_id:
+        stmt = stmt.where(Transaction.wallet_id == wallet_id)
+    if occurred_after:
+        stmt = stmt.where(Transaction.occurred_at >= occurred_after)
+    if occurred_before:
+        stmt = stmt.where(Transaction.occurred_at <= occurred_before)
     result = await session.execute(stmt.limit(limit).offset(offset))
     return result.scalars().all()
 

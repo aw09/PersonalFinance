@@ -62,6 +62,16 @@ Credit wallets accept optional `credit_limit` and `settlement_day` fields; inves
 
 Transactions created through the API or the Telegram bot automatically attach to the user's default wallet. Prefix Telegram commands with `@wallet` (for example, `/add @travel expense 150000 flight`) to post directly into a specific wallet without changing the default.
 
+### Telegram commands
+
+- `/add [type] <amount> <description>` - record an expense, income, debt, or receivable. Supports shorthand such as `e cafe 50000 lunch`.
+- `/receipt` - send a photo to extract a transaction from a receipt using Gemini.
+- `/owed [name]` - list outstanding receivables (with optional name filter).
+- `/report [range]` - show summaries for today, mtd, ytd, 1 week, 1 month, etc.
+- `/recent [@wallet] [limit|since|per]` - list the latest transactions with flexible pagination. Use `limit=n` to cap the total rows, `per=n` to change the page size (default 10), and `since=YYYY-MM-DD` to filter by date. Pagination buttons appear automatically when more data is available.
+- `/wallet <action>` - list wallets, add/edit them, or change the default wallet.
+- `/help` - show the command reference inside Telegram.
+
 ### Docker
 
 You can run the API inside a container:

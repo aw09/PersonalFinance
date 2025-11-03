@@ -12,11 +12,12 @@ from io import BytesIO
 from typing import Any
 
 import httpx
-from telegram import BotCommand, Update
+from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.ext import (
     AIORateLimiter,
     Application,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
@@ -39,6 +40,7 @@ HELP_TEXT = (
     "- /repay <name> <amount> [note|all]: track repayments (partial or full) against outstanding debts.\n"
     "- /owed [name]: list who still owes you, including installment and repayment history.\n"
     "- /report [range]: get a summary for today, mtd, ytd, 1 week, 1 month, and other natural ranges.\n"
+    "- /recent [@wallet] [limit|since|per]: show the latest entries (use limit=total caps, per=page size, since=YYYY-MM-DD).\n"
     "- /wallet <action>: list wallets, add/edit them, or change the default wallet.\n"
     "- /help: show this menu again.\n"
     "\nTransactions are stored in your default wallet automatically. Use `/wallet` to manage wallets "
@@ -70,6 +72,10 @@ TYPE_ALIASES: dict[str, str] = {
 
 ALLOWED_UPDATES = ["message", "callback_query"]
 WALLET_TYPES = {"regular", "investment", "credit"}
+RECENT_DEFAULT_LIMIT = 10
+RECENT_CALLBACK_PREFIX = "recent:"
+RECENT_CALLBACK_NEXT = "recent:next"
+RECENT_CALLBACK_PREV = "recent:prev"
 
 
 def _ensure_user_state(context: ContextTypes.DEFAULT_TYPE) -> dict[str, Any]:
@@ -158,6 +164,139 @@ def _parse_wallet_options(tokens: list[str]) -> dict[str, str]:
     return options
 
 
+def _parse_recent_args(
+    args: list[str],
+) -> tuple[str | None, int | None, date | None, int | None]:
+    wallet_hint: str | None = None
+    limit: int | None = None
+    since: date | None = None
+    page_size: int | None = None
+    for token in args:
+        token = token.strip()
+        if not token:
+            continue
+        if token.startswith("@"):
+            wallet_hint = token[1:].strip() or None
+            continue
+        lower = token.lower()
+        if lower.startswith("limit="):
+            value = lower.split("=", 1)[1]
+            try:
+                limit = max(1, int(value))
+            except ValueError as exc:
+                raise ValueError("Limit must be a positive integer.") from exc
+            continue
+        if any(lower.startswith(prefix) for prefix in ("per=", "page=", "pagesize=", "per_page=")):
+            value = lower.split("=", 1)[1]
+            try:
+                page_size = max(1, int(value))
+            except ValueError as exc:
+                raise ValueError("Page size must be a positive integer.") from exc
+            continue
+        if lower.startswith("since="):
+            value = token.split("=", 1)[1].strip()
+            try:
+                since = date.fromisoformat(value)
+            except ValueError as exc:
+                raise ValueError("Use YYYY-MM-DD format for dates.") from exc
+            continue
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", token):
+            try:
+                since = date.fromisoformat(token)
+            except ValueError as exc:
+                raise ValueError("Use YYYY-MM-DD format for dates.") from exc
+            continue
+        if token.isdigit():
+            limit = max(1, int(token))
+    return wallet_hint, limit, since, page_size
+
+
+def _recent_header(wallet_name: str | None, since: date | None) -> str:
+    parts = ["Recent transactions"]
+    if wallet_name:
+        parts.append(f"in {wallet_name}")
+    if since:
+        parts.append(f"since {since.isoformat()}")
+    return " ".join(parts)
+
+
+async def _format_recent_line(
+    context: ContextTypes.DEFAULT_TYPE,
+    api_client: "FinanceApiClient",
+    user_id: str,
+    tx: dict[str, Any],
+) -> str:
+    occurred = str(tx.get("occurred_at") or "-")
+    tx_type = str(tx.get("type", "")).capitalize()
+    amount_text = _format_amount_for_display(tx.get("amount", "0"), tx.get("currency", "IDR"))
+    description = _escape_markdown(str(tx.get("description") or "No description"))
+    wallet_label = None
+    wallet_id = tx.get("wallet_id")
+    if wallet_id:
+        wallet = await _get_wallet_by_id(context, api_client, user_id, wallet_id)
+        if wallet:
+            wallet_label = wallet.get("name")
+    wallet_suffix = f" (wallet: {_escape_markdown(wallet_label)})" if wallet_label else ""
+    return f"- {occurred}: {tx_type} {amount_text} — *{description}*{wallet_suffix}"
+
+
+async def _generate_recent_page(
+    context: ContextTypes.DEFAULT_TYPE,
+    api_client: "FinanceApiClient",
+    user: dict[str, Any],
+    filters: dict[str, Any],
+    offset: int,
+) -> tuple[str, InlineKeyboardMarkup | None, int, bool]:
+    page_size: int = filters["page_size"]
+    max_results: int | None = filters.get("max_results")
+    remaining: int | None = None
+    if max_results is not None:
+        remaining = max(0, max_results - offset)
+    fetch_limit = page_size + 1
+    if remaining is not None:
+        if remaining == 0:
+            transactions: list[dict[str, Any]] = []
+        else:
+            fetch_limit = min(fetch_limit, remaining + 1)
+    if remaining == 0:
+        transactions = []
+    else:
+        params: dict[str, Any] = {
+            "user_id": user["id"],
+            "limit": max(1, fetch_limit),
+            "offset": max(0, offset),
+        }
+        if filters.get("wallet_id"):
+            params["wallet_id"] = filters["wallet_id"]
+        if filters.get("since"):
+            params["occurred_after"] = filters["since"].isoformat()
+
+        transactions = await api_client.list_transactions(**params)
+    has_next = len(transactions) > page_size
+    if max_results is not None and (offset + page_size) >= max_results:
+        has_next = False
+    page_transactions = transactions[:page_size]
+
+    header = _recent_header(filters.get("wallet_name"), filters.get("since"))
+    lines: list[str] = [f"*{_escape_markdown(header)}*"]
+    for tx in page_transactions:
+        lines.append(await _format_recent_line(context, api_client, str(user["id"]), tx))
+    if not page_transactions:
+        lines.append("No transactions found for the selected criteria.")
+
+    keyboard: InlineKeyboardMarkup | None = None
+    if offset > 0 or has_next:
+        buttons: list[InlineKeyboardButton] = []
+        if offset > 0:
+            buttons.append(InlineKeyboardButton("< Prev", callback_data=RECENT_CALLBACK_PREV))
+        if has_next:
+            buttons.append(InlineKeyboardButton("Next >", callback_data=RECENT_CALLBACK_NEXT))
+        if buttons:
+            keyboard = InlineKeyboardMarkup([buttons])
+
+    return "\n".join(lines), keyboard, len(page_transactions), has_next
+
+
 def _parse_bool_flag(value: str) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
@@ -207,11 +346,23 @@ class FinanceApiClient:
         *,
         user_id: str,
         limit: int = 500,
+        offset: int = 0,
+        wallet_id: str | None = None,
+        occurred_after: str | None = None,
+        occurred_before: str | None = None,
     ) -> list[dict[str, Any]]:
-        response = await self.client.get(
-            "/api/transactions",
-            params={"user_id": user_id, "limit": min(limit, 200)},
-        )
+        params: dict[str, Any] = {
+            "user_id": user_id,
+            "limit": min(limit, 200),
+            "offset": max(offset, 0),
+        }
+        if wallet_id:
+            params["wallet_id"] = wallet_id
+        if occurred_after:
+            params["occurred_after"] = occurred_after
+        if occurred_before:
+            params["occurred_before"] = occurred_before
+        response = await self.client.get("/api/transactions", params=params)
         response.raise_for_status()
         return response.json()
 
@@ -371,7 +522,7 @@ async def lend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     note = " ".join(args[amount_idx + 1 :]).strip()
 
-    api_client: FinanceApiClient = context.application.bot_data["api_client"]
+    api_client: "FinanceApiClient" = context.application.bot_data["api_client"]
     tele_user = update.effective_user
     if tele_user is None:
         await update.message.reply_text("Could not determine your Telegram user.")
@@ -475,7 +626,7 @@ async def repay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     note = " ".join(note_tokens).strip()
 
-    api_client: FinanceApiClient = context.application.bot_data["api_client"]
+    api_client: "FinanceApiClient" = context.application.bot_data["api_client"]
     tele_user = update.effective_user
     if tele_user is None:
         await update.message.reply_text("Could not determine your Telegram user.")
@@ -619,7 +770,7 @@ async def owed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
         return
     filter_name = " ".join(getattr(context, "args", [])).strip()
-    api_client: FinanceApiClient = context.application.bot_data["api_client"]
+    api_client: "FinanceApiClient" = context.application.bot_data["api_client"]
     tele_user = update.effective_user
     if tele_user is None:
         await update.message.reply_text("Could not determine your Telegram user.")
@@ -689,7 +840,7 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(str(exc))
         return
 
-    api_client: FinanceApiClient = context.application.bot_data["api_client"]
+    api_client: "FinanceApiClient" = context.application.bot_data["api_client"]
     try:
         user = await api_client.ensure_user(tele_user.id, tele_user.full_name)
     except httpx.HTTPStatusError as exc:
@@ -702,7 +853,7 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     try:
-        transactions = await api_client.list_transactions(user_id=user["id"])
+        transactions = await api_client.list_transactions(user_id=user["id"], limit=200, offset=0)
     except httpx.HTTPStatusError as exc:
         await update.message.reply_text(f"Could not fetch transactions: {exc.response.text}")
         return
@@ -759,7 +910,7 @@ def _format_wallet_overview(wallets: list[dict[str, Any]]) -> str:
 async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
         return
-    api_client: FinanceApiClient = context.application.bot_data["api_client"]
+    api_client: "FinanceApiClient" = context.application.bot_data["api_client"]
     tele_user = update.effective_user
     if tele_user is None:
         await update.message.reply_text("Could not determine your Telegram user.")
@@ -955,6 +1106,115 @@ async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text(usage)
 
 
+
+
+async def recent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    api_client: "FinanceApiClient" = context.application.bot_data["api_client"]
+    tele_user = update.effective_user
+    if tele_user is None:
+        await update.message.reply_text("Could not determine your Telegram user.")
+        return
+    try:
+        user = await api_client.ensure_user(tele_user.id, tele_user.full_name)
+    except httpx.HTTPStatusError as exc:
+        logger.exception("Failed to ensure Telegram user in backend")
+        await update.message.reply_text(f"User sync error: {exc.response.text}")
+        return
+    except Exception:
+        logger.exception("Failed to ensure Telegram user in backend")
+        await update.message.reply_text("Could not sync your Telegram user with the backend.")
+        return
+
+    args = list(getattr(context, "args", []) or [])
+    try:
+        wallet_hint, limit_arg, since, page_size_arg = _parse_recent_args(args)
+    except ValueError as exc:
+        await update.message.reply_text(str(exc))
+        return
+
+    page_size_value = page_size_arg or RECENT_DEFAULT_LIMIT
+    page_size_value = max(1, min(page_size_value, 50))
+    max_results = limit_arg
+    if max_results is not None:
+        page_size_value = min(page_size_value, max_results)
+
+    wallet_record = None
+    if wallet_hint:
+        try:
+            wallet_record = await _get_wallet_by_name(context, api_client, user["id"], wallet_hint)
+        except ValueError as exc:
+            await update.message.reply_text(str(exc))
+            return
+
+    filters = {
+        "wallet_id": wallet_record["id"] if wallet_record else None,
+        "wallet_name": wallet_record["name"] if wallet_record else None,
+        "since": since,
+        "page_size": page_size_value,
+        "max_results": max_results,
+    }
+
+    page_text, keyboard, count, has_next = await _generate_recent_page(
+        context, api_client, user, filters, offset=0
+    )
+
+    await update.message.reply_text(
+        page_text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard
+    )
+
+    user_state = _ensure_user_state(context)
+    if keyboard:
+        stored_filters = filters.copy()
+        stored_filters["user_id"] = user["id"]
+        stored_filters["has_next"] = has_next
+        user_state["recent_filters"] = stored_filters
+        user_state["recent_offset"] = 0
+    else:
+        user_state.pop("recent_filters", None)
+        user_state.pop("recent_offset", None)
+
+
+async def recent_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not query:
+        return
+    await query.answer()
+    user_state = _ensure_user_state(context)
+    filters = user_state.get("recent_filters")
+    if not filters:
+        await query.edit_message_text("Session expired. Run /recent again.")
+        return
+
+    direction = query.data.split(":", 1)[1] if ":" in query.data else ""
+    offset = user_state.get("recent_offset", 0)
+    page_size = filters["page_size"]
+    if direction == "next":
+        offset += page_size
+    elif direction == "prev":
+        offset = max(0, offset - page_size)
+
+    api_client: "FinanceApiClient" = context.application.bot_data["api_client"]
+    user = {"id": filters["user_id"]}
+
+    page_text, keyboard, count, has_next = await _generate_recent_page(
+        context, api_client, user, filters, offset
+    )
+    if count == 0 and direction == "next" and offset > 0:
+        offset = max(0, offset - page_size)
+        page_text, keyboard, count, has_next = await _generate_recent_page(
+            context, api_client, user, filters, offset
+        )
+
+    filters["has_next"] = has_next
+    user_state["recent_offset"] = offset
+    user_state["recent_filters"] = filters
+    await query.edit_message_text(
+        page_text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard
+    )
+
+
 async def receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
         return
@@ -981,7 +1241,7 @@ async def receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await status_message.edit_text("Could not download your photo. Please try again.")
         return
 
-    api_client: FinanceApiClient = context.application.bot_data["api_client"]
+    api_client: "FinanceApiClient" = context.application.bot_data["api_client"]
     try:
         user = await api_client.ensure_user(tele_user.id, tele_user.full_name)
     except httpx.HTTPStatusError as exc:
@@ -1060,7 +1320,7 @@ async def _create_transaction(
         await update.message.reply_text(str(exc))
         return
 
-    api_client: FinanceApiClient = context.application.bot_data["api_client"]
+    api_client: "FinanceApiClient" = context.application.bot_data["api_client"]
     tele_user = update.effective_user
     if tele_user is None:
         await update.message.reply_text("Could not determine your Telegram user.")
@@ -1138,9 +1398,11 @@ def _create_application(token: str, api_client: FinanceApiClient) -> Application
     application.add_handler(CommandHandler("repay", repay))
     application.add_handler(CommandHandler("owed", owed))
     application.add_handler(CommandHandler("report", report))
+    application.add_handler(CommandHandler("recent", recent))
     application.add_handler(CommandHandler(["wallet", "wallets"], wallet_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, free_text_transaction))
     application.add_handler(MessageHandler(filters.PHOTO, receipt_photo))
+    application.add_handler(CallbackQueryHandler(recent_callback, pattern=f"^{RECENT_CALLBACK_PREFIX}"))
     return application
 
 
@@ -1180,6 +1442,7 @@ async def init_bot() -> None:
                         BotCommand("repay", "Record repayment received"),
                         BotCommand("owed", "Show outstanding balances"),
                         BotCommand("wallet", "Manage wallets"),
+                        BotCommand("recent", "Show recent transactions"),
                         BotCommand("report", "Show a spending summary"),
                     ]
                 )

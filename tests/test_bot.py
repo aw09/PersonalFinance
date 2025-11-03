@@ -8,6 +8,8 @@ from uuid import UUID
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, patch
 
+from telegram import InlineKeyboardMarkup
+
 from app.telegram import bot
 
 
@@ -231,16 +233,169 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
 
             await bot.report(update, context)
 
-            api_client.list_transactions.assert_awaited_once_with(
-                user_id=str(UUID("11111111-2222-3333-4444-555555555555"))
-            )
-            message.reply_text.assert_awaited_once()
-            report_text = message.reply_text.await_args.args[0]
-            self.assertIn("Report for today", report_text)
-            self.assertIn("- Expense: 10 K IDR", report_text)
-            self.assertIn("- Income: 50 K IDR", report_text)
-            self.assertIn("- Net: 40 K IDR", report_text)
+        kwargs = api_client.list_transactions.await_args.kwargs
+        self.assertEqual(kwargs["user_id"], str(UUID("11111111-2222-3333-4444-555555555555")))
+        self.assertEqual(kwargs["limit"], 200)
+        self.assertEqual(kwargs["offset"], 0)
+        message.reply_text.assert_awaited_once()
+        report_text = message.reply_text.await_args.args[0]
+        self.assertIn("Report for today", report_text)
+        self.assertIn("- Expense: 10 K IDR", report_text)
+        self.assertIn("- Income: 50 K IDR", report_text)
+        self.assertIn("- Net: 40 K IDR", report_text)
 
+    async def test_recent_command_default(self) -> None:
+        message = DummyMessage("/recent")
+        update = SimpleNamespace(
+            message=message,
+            effective_user=SimpleNamespace(id=123, full_name="Faris Tester"),
+        )
+        api_client = AsyncMock()
+        api_client.ensure_user.return_value = {"id": "user-1"}
+        api_client.list_transactions.return_value = [
+            {
+                "id": "tx-1",
+                "occurred_at": "2025-11-01",
+                "type": "expense",
+                "amount": "10000",
+                "currency": "IDR",
+                "description": "Lunch",
+                "wallet_id": None,
+            }
+        ]
+        context = SimpleNamespace(
+            application=SimpleNamespace(bot_data={"api_client": api_client}),
+            args=[],
+            user_data={},
+        )
+
+        await bot.recent(update, context)
+
+        kwargs = api_client.list_transactions.await_args.kwargs
+        self.assertEqual(kwargs["user_id"], "user-1")
+        self.assertEqual(kwargs["limit"], bot.RECENT_DEFAULT_LIMIT + 1)
+        self.assertEqual(kwargs["offset"], 0)
+        message.reply_text.assert_awaited_once()
+        recent_text = message.reply_text.await_args.args[0]
+        self.assertIn("Recent transactions", recent_text)
+        self.assertIn("Lunch", recent_text)
+        self.assertIsNone(message.reply_text.await_args.kwargs.get("reply_markup"))
+
+    async def test_recent_command_with_wallet_and_limit(self) -> None:
+        message = DummyMessage("/recent @travel limit=5")
+        update = SimpleNamespace(
+            message=message,
+            effective_user=SimpleNamespace(id=123, full_name="Faris Tester"),
+        )
+        api_client = AsyncMock()
+        api_client.ensure_user.return_value = {"id": "user-1"}
+        api_client.list_wallets.return_value = [
+            {"id": "w-main", "name": "Main Wallet"},
+            {"id": "w-travel", "name": "Travel"},
+        ]
+        api_client.list_transactions.return_value = [
+            {
+                "id": "tx-1",
+                "occurred_at": "2025-11-02",
+                "type": "expense",
+                "amount": "20000",
+                "currency": "IDR",
+                "description": "Taxi",
+                "wallet_id": "w-travel",
+            }
+        ]
+        context = SimpleNamespace(
+            application=SimpleNamespace(bot_data={"api_client": api_client}),
+            args=["@travel", "limit=5"],
+            user_data={},
+        )
+
+        await bot.recent(update, context)
+
+        kwargs = api_client.list_transactions.await_args.kwargs
+        self.assertEqual(kwargs["wallet_id"], "w-travel")
+        self.assertEqual(kwargs["limit"], 6)
+        self.assertEqual(kwargs["offset"], 0)
+        text = message.reply_text.await_args.args[0]
+        self.assertIn("Travel", text)
+        self.assertIsNone(context.user_data.get("recent_filters"))
+
+    async def test_recent_command_since_enables_pagination(self) -> None:
+        message = DummyMessage("/recent since=2025-01-01")
+        update = SimpleNamespace(
+            message=message,
+            effective_user=SimpleNamespace(id=123, full_name="Faris Tester"),
+        )
+        api_client = AsyncMock()
+        api_client.ensure_user.return_value = {"id": "user-1"}
+        api_client.list_transactions.return_value = [
+            {
+                "id": f"tx-{i}",
+                "occurred_at": "2025-01-0{i+1}",
+                "type": "expense",
+                "amount": "1000",
+                "currency": "IDR",
+                "description": f"Item {i}",
+                "wallet_id": None,
+            }
+            for i in range(11)
+        ]
+        context = SimpleNamespace(
+            application=SimpleNamespace(bot_data={"api_client": api_client}),
+            args=["since=2025-01-01"],
+            user_data={},
+        )
+
+        await bot.recent(update, context)
+
+        kwargs = api_client.list_transactions.await_args.kwargs
+        self.assertEqual(kwargs["occurred_after"], "2025-01-01")
+        self.assertEqual(kwargs["limit"], bot.RECENT_DEFAULT_LIMIT + 1)
+        reply_kwargs = message.reply_text.await_args.kwargs
+        self.assertIsInstance(reply_kwargs.get("reply_markup"), InlineKeyboardMarkup)
+        state = context.user_data.get("recent_filters")
+        self.assertIsNotNone(state)
+        self.assertTrue(state.get("has_next"))
+        self.assertIsNone(state.get("max_results"))
+
+    async def test_recent_command_with_limit_and_per(self) -> None:
+        message = DummyMessage("/recent limit=30 per=20")
+        update = SimpleNamespace(
+            message=message,
+            effective_user=SimpleNamespace(id=123, full_name="Faris Tester"),
+        )
+        api_client = AsyncMock()
+        api_client.ensure_user.return_value = {"id": "user-1"}
+        api_client.list_transactions.return_value = [
+            {
+                "id": f"tx-{i}",
+                "occurred_at": f"2025-01-{(i % 28) + 1:02d}",
+                "type": "expense",
+                "amount": "1000",
+                "currency": "IDR",
+                "description": f"Item {i}",
+                "wallet_id": None,
+            }
+            for i in range(21)
+        ]
+        context = SimpleNamespace(
+            application=SimpleNamespace(bot_data={"api_client": api_client}),
+            args=["limit=30", "per=20"],
+            user_data={},
+        )
+
+        await bot.recent(update, context)
+
+        kwargs = api_client.list_transactions.await_args.kwargs
+        self.assertEqual(kwargs["limit"], 21)
+        self.assertEqual(kwargs["offset"], 0)
+        reply_kwargs = message.reply_text.await_args.kwargs
+        self.assertIsInstance(reply_kwargs.get("reply_markup"), InlineKeyboardMarkup)
+        state = context.user_data.get("recent_filters")
+        self.assertIsNotNone(state)
+        self.assertEqual(state["page_size"], 20)
+        self.assertEqual(state["max_results"], 30)
+        self.assertTrue(state.get("has_next"))
     async def test_lend_command_creates_debt_and_transaction(self) -> None:
         message = DummyMessage()
         update = SimpleNamespace(
