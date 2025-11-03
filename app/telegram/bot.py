@@ -31,21 +31,59 @@ from ..models.transaction import TransactionType
 
 logger = logging.getLogger(__name__)
 
-HELP_TEXT = (
-    "What I can do:\n"
-    "- /add <type> <amount> <description>: log expense, income, debt, or receivable transactions.\n"
-    '- Send plain text such as "expense 12000 lunch" or shorthand "e lunch 12000" for quick capture.\n'
-    "- Send a receipt photo to extract items and create a transaction automatically.\n"
-    "- /lend <name> <amount> [note]: record money you lent to someone.\n"
-    "- /repay <name> <amount> [note|all]: track repayments (partial or full) against outstanding debts.\n"
-    "- /owed [name]: list who still owes you, including installment and repayment history.\n"
-    "- /report [range]: get a summary for today, mtd, ytd, 1 week, 1 month, and other natural ranges.\n"
-    "- /recent [@wallet] [limit|since|per]: show the latest entries (use limit=total caps, per=page size, since=YYYY-MM-DD).\n"
-    "- /wallet <action>: list wallets, add/edit them, or change the default wallet.\n"
-    "- /help: show this menu again.\n"
-    "\nTransactions are stored in your default wallet automatically. Use `/wallet` to manage wallets "
-    "(regular, investment, credit) and prefix transactions with `@wallet` to target a different one."
+HELP_OVERVIEW = (
+    "How I can help:\n"
+    "\n"
+    "• Quick capture: /add <type> <amount> <description>, free text like \"e lunch 12000\", or send a receipt photo.\n"
+    "• Wallets: /wallet list, add, edit, default — manage regular, investment, and credit wallets.\n"
+    "• Debts & repayments: /lend, /repay, /owed keep track of who owes you and installment schedules.\n"
+    "• Reports: /report [range] for summaries, /recent [options] to browse transactions with pagination.\n"
+    "\n"
+    "Need details? Try /help wallet, /help add, /help recent, /help report, or /help debts."
 )
+
+HELP_TOPICS: dict[str, str] = {
+    "wallet": (
+        "Wallet commands:\n"
+        "• /wallet list — refresh and show all wallets with balances.\n"
+        "• /wallet add <name> <regular|investment|credit> [currency=IDR] "
+        "[limit=...] [settlement=day] [default=yes|no].\n"
+        "• /wallet edit <name> [name=...] [currency=...] [limit=...] "
+        "[settlement=day] [default=yes|no].\n"
+        "• /wallet default <name> — set the default wallet used by /add and quick entries.\n"
+        "Tips:\n"
+        "• Prefix transactions with @wallet (e.g. `/add @travel expense 150000 flight`).\n"
+        "• Credit wallets accept limit & settlement fields; investment wallets are great for savings."
+    ),
+    "add": (
+        "Adding transactions:\n"
+        "• /add [@wallet] <expense|income|debt|receivable> <amount> <description>.\n"
+        "• Quick shorthand works: `e lunch 12000` or `@cash income 50000 bonus`.\n"
+        "• Amounts can contain commas or decimals (e.g. 1,250 or 45.67).\n"
+        "• When omitted, transactions land in your default wallet."
+    ),
+    "recent": (
+        "Recent activity:\n"
+        "• /recent [@wallet] [limit=total] [per=page] [since=YYYY-MM-DD].\n"
+        "• `per` changes the page size (default 10). `limit` caps total rows fetched.\n"
+        "• Inline Next/Prev buttons let you page through older results.\n"
+        "• Combine with @wallet to focus on a specific wallet."
+    ),
+    "report": (
+        "Reports:\n"
+        "• /report [range] summarises expenses, income, debts, and receivables.\n"
+        "• Supported ranges: today, daily, mtd, ytd, last week/month/year, "
+        "and phrases like `last 3 months` or `last 14 days`.\n"
+        "• Output groups totals per currency and includes a net figure."
+    ),
+    "debts": (
+        "Debts & repayments:\n"
+        "• /lend <name> <amount> [note] — records a receivable and creates a debt schedule.\n"
+        "• /repay <name> <amount> [note|all] — applies repayments to outstanding installments.\n"
+        "• /owed [name] — shows who still owes you, including installment breakdowns.\n"
+        "• Repayments track partial payments and mark debts settled automatically."
+    ),
+}
 
 try:
     USER_TIMEZONE = ZoneInfo("Asia/Jakarta")
@@ -443,7 +481,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
         return
-    await update.message.reply_text(HELP_TEXT)
+    topic = None
+    args = getattr(context, "args", None)
+    if args:
+        topic = (args[0] or "").strip().lower()
+    if topic:
+        help_text = HELP_TOPICS.get(topic)
+        if help_text:
+            await update.message.reply_text(help_text)
+            return
+        await update.message.reply_text(
+            f"No detailed help for '{topic}'. Try /help wallet, /help add, /help recent, /help report, or /help debts."
+        )
+        return
+    await update.message.reply_text(HELP_OVERVIEW)
 
 
 async def add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -193,13 +193,29 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
     async def test_help_command_lists_features(self) -> None:
         message = DummyMessage()
         update = SimpleNamespace(message=message)
-        await bot.help_command(update, SimpleNamespace())
+        await bot.help_command(update, SimpleNamespace(args=[]))
         message.reply_text.assert_awaited_once()
         help_text = message.reply_text.await_args.args[0]
-        self.assertIn("/report", help_text)
-        self.assertIn("/wallet", help_text)
-        self.assertIn("receipt", help_text.lower())
-        self.assertIn("shorthand", help_text.lower())
+        self.assertIn("Quick capture", help_text)
+        self.assertIn("/help wallet", help_text)
+
+    async def test_help_command_wallet_topic(self) -> None:
+        message = DummyMessage()
+        update = SimpleNamespace(message=message)
+        await bot.help_command(update, SimpleNamespace(args=["wallet"]))
+        message.reply_text.assert_awaited_once()
+        help_text = message.reply_text.await_args.args[0]
+        self.assertIn("/wallet add", help_text)
+        self.assertIn("Prefix transactions with @wallet", help_text)
+
+    async def test_help_command_unknown_topic(self) -> None:
+        message = DummyMessage()
+        update = SimpleNamespace(message=message)
+        await bot.help_command(update, SimpleNamespace(args=["unknown"]))
+        message.reply_text.assert_awaited_once()
+        unknown_text = message.reply_text.await_args.args[0]
+        self.assertIn("No detailed help", unknown_text)
+        self.assertIn("/help wallet", unknown_text)
 
     async def test_report_command_generates_summary(self) -> None:
         today = bot.date.today()
