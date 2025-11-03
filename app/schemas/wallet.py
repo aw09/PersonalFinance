@@ -47,3 +47,16 @@ class WalletTransactionRequest(BaseModel):
     amount: Decimal
     description: Optional[str] = Field(default=None, max_length=256)
     occurred_at: Optional[date] = None
+
+
+class WalletTransferRequest(BaseModel):
+    source_wallet_id: UUID
+    target_wallet_id: UUID
+    amount: Decimal
+    description: Optional[str] = Field(default=None, max_length=256)
+    occurred_at: Optional[date] = None
+
+
+class WalletTransferResponse(BaseModel):
+    source_wallet: WalletRead
+    target_wallet: WalletRead

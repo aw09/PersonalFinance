@@ -11,7 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..models.user import User
 from ..models.wallet import Wallet, WalletType
 from ..schemas.transaction import TransactionCreate
-from ..schemas.wallet import WalletCreate, WalletUpdate, WalletTransactionRequest
+from ..schemas.wallet import (
+    WalletCreate,
+    WalletUpdate,
+    WalletTransactionRequest,
+    WalletTransferRequest,
+)
 
 
 async def ensure_default_wallet(session: AsyncSession, user_id: UUID) -> Wallet:
@@ -200,3 +205,43 @@ async def wallet_adjust(
         occurred_at=request.occurred_at,
         source=source,
     )
+
+
+async def wallet_transfer(
+    session: AsyncSession,
+    source_wallet: Wallet,
+    target_wallet: Wallet,
+    request: WalletTransferRequest,
+) -> tuple[Wallet, Wallet]:
+    if source_wallet.id == target_wallet.id:
+        raise ValueError("Source and target wallets must be different")
+    if source_wallet.user_id != target_wallet.user_id:
+        raise ValueError("Cannot transfer between wallets from different users")
+    if request.amount <= 0:
+        raise ValueError("Transfer amount must be positive")
+    if source_wallet.currency != target_wallet.currency:
+        raise ValueError("Wallet currencies must match before transferring")
+
+    description = request.description
+    occurred_at = request.occurred_at
+
+    withdraw_desc = description or f"Transfer to {target_wallet.name}"
+    deposit_desc = description or f"Transfer from {source_wallet.name}"
+
+    withdraw_payload = WalletTransactionRequest(
+        amount=request.amount,
+        description=withdraw_desc,
+        occurred_at=occurred_at,
+    )
+    deposit_payload = WalletTransactionRequest(
+        amount=request.amount,
+        description=deposit_desc,
+        occurred_at=occurred_at,
+    )
+
+    await wallet_withdraw(session, source_wallet, withdraw_payload)
+    await wallet_deposit(session, target_wallet, deposit_payload)
+
+    await session.refresh(source_wallet)
+    await session.refresh(target_wallet)
+    return source_wallet, target_wallet

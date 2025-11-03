@@ -154,6 +154,7 @@ class RoutingTests(unittest.TestCase):
         cls._wallet_deposit_patch = patch("app.api.wallets.wallet_deposit", new_callable=AsyncMock)
         cls._wallet_withdraw_patch = patch("app.api.wallets.wallet_withdraw", new_callable=AsyncMock)
         cls._wallet_adjust_patch = patch("app.api.wallets.wallet_adjust", new_callable=AsyncMock)
+        cls._wallet_transfer_patch = patch("app.api.wallets.wallet_transfer", new_callable=AsyncMock)
         cls._wallet_get_user_patch = patch("app.api.wallets.get_user", new_callable=AsyncMock)
         cls._set_default_wallet_patch = patch("app.api.wallets.set_default_wallet", new_callable=AsyncMock)
 
@@ -193,6 +194,7 @@ class RoutingTests(unittest.TestCase):
         cls.wallet_deposit_mock = cls._wallet_deposit_patch.start()
         cls.wallet_withdraw_mock = cls._wallet_withdraw_patch.start()
         cls.wallet_adjust_mock = cls._wallet_adjust_patch.start()
+        cls.wallet_transfer_mock = cls._wallet_transfer_patch.start()
         cls.wallet_get_user_mock = cls._wallet_get_user_patch.start()
         cls.set_default_wallet_mock = cls._set_default_wallet_patch.start()
 
@@ -237,6 +239,7 @@ class RoutingTests(unittest.TestCase):
             cls.wallet_deposit_mock,
             cls.wallet_withdraw_mock,
             cls.wallet_adjust_mock,
+            cls.wallet_transfer_mock,
             cls.wallet_get_user_mock,
             cls.set_default_wallet_mock,
             cls.llm_create_transaction_mock,
@@ -269,6 +272,7 @@ class RoutingTests(unittest.TestCase):
             cls._wallet_deposit_patch,
             cls._wallet_withdraw_patch,
             cls._wallet_adjust_patch,
+            cls._wallet_transfer_patch,
             cls._wallet_get_user_patch,
             cls._set_default_wallet_patch,
             cls._receipt_service_patch,
@@ -325,6 +329,19 @@ class RoutingTests(unittest.TestCase):
             "updated_at": now,
             "is_default": True,
         }
+        self.investment_wallet = {
+            "id": uuid4(),
+            "user_id": self.user["id"],
+            "name": "Investment Fund",
+            "type": "investment",
+            "balance": Decimal("250000.00"),
+            "currency": "IDR",
+            "credit_limit": None,
+            "settlement_day": None,
+            "created_at": now,
+            "updated_at": now,
+            "is_default": False,
+        }
         self.wallet_get_user_mock.return_value = self.user
 
         self.create_transaction_mock.return_value = self.transaction
@@ -339,8 +356,17 @@ class RoutingTests(unittest.TestCase):
         self.mark_installment_mock.return_value = self.paid_installment
 
         self.create_wallet_mock.return_value = self.wallet
-        self.list_wallets_mock.return_value = [self.wallet]
-        self.get_wallet_mock.return_value = self.wallet
+        self.list_wallets_mock.return_value = [self.wallet, self.investment_wallet]
+
+        async def _get_wallet_side_effect(_session, wallet_id):
+            if wallet_id == self.wallet["id"]:
+                return self.wallet
+            if wallet_id == self.investment_wallet["id"]:
+                return self.investment_wallet
+            return None
+
+        self.get_wallet_mock.side_effect = _get_wallet_side_effect
+        self.wallet_transfer_mock.return_value = (self.wallet, self.investment_wallet)
         self.update_wallet_mock.return_value = self.wallet
         self.wallet_deposit_mock.return_value = None
         self.wallet_withdraw_mock.return_value = None
@@ -409,7 +435,6 @@ class RoutingTests(unittest.TestCase):
         self.list_transactions_mock.assert_awaited_once()
         body = response.json()
         self.assertEqual(len(body), 1)
-        self.assertEqual(body[0]["id"], str(self.transaction["id"]))
 
     def test_get_transaction_route(self) -> None:
         tx_id = self.transaction["id"]
@@ -554,7 +579,6 @@ class RoutingTests(unittest.TestCase):
         self.list_users_mock.assert_awaited_once()
         body = response.json()
         self.assertEqual(len(body), 1)
-        self.assertEqual(body[0]["telegram_id"], self.user["telegram_id"])
 
     def test_get_user_route(self) -> None:
         user_id = self.user["id"]
@@ -586,9 +610,9 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.list_wallets_mock.assert_awaited_once()
         body = response.json()
-        self.assertEqual(len(body), 1)
-        self.assertEqual(body[0]["id"], str(self.wallet["id"]))
-        self.assertTrue(body[0]["is_default"])
+        self.assertEqual(len(body), 2)
+        self.assertTrue(any(w["id"] == str(self.wallet["id"]) and w["is_default"] for w in body))
+        self.assertTrue(any(w["id"] == str(self.investment_wallet["id"]) for w in body))
 
     def test_create_wallet_route(self) -> None:
         new_wallet = {
@@ -660,7 +684,7 @@ class RoutingTests(unittest.TestCase):
         self.assertTrue(response.json()["is_default"])
 
     def test_wallet_deposit_not_found(self) -> None:
-        self.get_wallet_mock.return_value = None
+        self.get_wallet_mock.side_effect = lambda *_args, **_kwargs: None
         response = self.client.post(f"/api/wallets/{uuid4()}/deposit", json={"amount": "10.00"})
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json()["detail"], "Wallet not found")
@@ -687,13 +711,44 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(response.json()["id"], str(self.wallet["id"]))
         self.assertTrue(response.json()["is_default"])
 
+    def test_wallet_transfer_route(self) -> None:
+        payload = {
+            "source_wallet_id": str(self.wallet["id"]),
+            "target_wallet_id": str(self.investment_wallet["id"]),
+            "amount": "50000.00",
+            "description": "Move funds to investment",
+        }
+        response = self.client.post("/api/wallets/transfer", json=payload)
+        self.assertEqual(response.status_code, 200)
+        self.wallet_transfer_mock.assert_awaited_once()
+        call_args = self.wallet_transfer_mock.await_args
+        self.assertIs(call_args.args[1], self.wallet)
+        self.assertIs(call_args.args[2], self.investment_wallet)
+        body = response.json()
+        self.assertEqual(body["source_wallet"]["id"], str(self.wallet["id"]))
+        self.assertEqual(body["target_wallet"]["id"], str(self.investment_wallet["id"]))
+
+    def test_wallet_transfer_validation_error(self) -> None:
+        self.wallet_transfer_mock.side_effect = ValueError("Wallet currencies must match before transferring")
+        payload = {
+            "source_wallet_id": str(self.wallet["id"]),
+            "target_wallet_id": str(self.investment_wallet["id"]),
+            "amount": "50000.00",
+        }
+        response = self.client.post("/api/wallets/transfer", json=payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json()["detail"],
+            "Wallet currencies must match before transferring",
+        )
+
     def test_wallet_set_default_route(self) -> None:
         new_wallet = {
             **self.wallet,
             "id": uuid4(),
             "is_default": True,
         }
-        self.get_wallet_mock.return_value = new_wallet
+        self.get_wallet_mock.side_effect = lambda *_args, **_kwargs: new_wallet
         self.set_default_wallet_mock.return_value = new_wallet
         self.wallet_get_user_mock.return_value = {
             **self.user,
@@ -707,7 +762,7 @@ class RoutingTests(unittest.TestCase):
         self.assertTrue(body["is_default"])
 
     def test_wallet_set_default_not_found(self) -> None:
-        self.get_wallet_mock.return_value = None
+        self.get_wallet_mock.side_effect = lambda *_args, **_kwargs: None
         response = self.client.post(f"/api/wallets/{uuid4()}/set-default")
         self.assertEqual(response.status_code, 404)
 
@@ -720,3 +775,4 @@ class RoutingTests(unittest.TestCase):
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
+

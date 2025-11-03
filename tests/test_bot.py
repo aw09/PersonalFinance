@@ -243,6 +243,70 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
         )
         self.assertIn("wallet: Travel Fund", final_text)
 
+
+    async def test_wallet_transfer_command(self) -> None:
+        message = DummyMessage('/wallet transfer 50000 Main Investment')
+        update = SimpleNamespace(
+            message=message,
+            effective_user=SimpleNamespace(id=528101001, full_name='Faris Tester'),
+        )
+
+        api_client = AsyncMock()
+        api_client.ensure_user.return_value = {'id': 'user-1'}
+        api_client.list_wallets.return_value = [
+            {
+                'id': 'w-main',
+                'name': 'Main Wallet',
+                'type': 'regular',
+                'balance': '150000.00',
+                'currency': 'IDR',
+                'is_default': True,
+            },
+            {
+                'id': 'w-invest',
+                'name': 'Investment Fund',
+                'type': 'investment',
+                'balance': '200000.00',
+                'currency': 'IDR',
+                'is_default': False,
+            },
+        ]
+        api_client.transfer_wallets.return_value = {
+            'source_wallet': {
+                'id': 'w-main',
+                'name': 'Main Wallet',
+                'type': 'regular',
+                'balance': '100000.00',
+                'currency': 'IDR',
+                'is_default': True,
+            },
+            'target_wallet': {
+                'id': 'w-invest',
+                'name': 'Investment Fund',
+                'type': 'investment',
+                'balance': '250000.00',
+                'currency': 'IDR',
+                'is_default': False,
+            },
+        }
+
+        context = SimpleNamespace(
+            application=SimpleNamespace(bot_data={'api_client': api_client}),
+            args=['transfer', '50000', 'Main', 'Investment'],
+            user_data={},
+        )
+
+        await bot.wallet_command(update, context)
+
+        payload = api_client.transfer_wallets.await_args.args[0]
+        self.assertEqual(payload['amount'], '50000.00')
+        self.assertEqual(payload['source_wallet_id'], 'w-main')
+        self.assertEqual(payload['target_wallet_id'], 'w-invest')
+        message.reply_text.assert_awaited_once()
+        transfer_text = message.reply_text.await_args.args[0]
+
+        self.assertIn('Transferred 50 K IDR', transfer_text)
+        self.assertIn('Investment Fund', transfer_text)
     async def test_help_command_lists_features(self) -> None:
         message = DummyMessage()
         update = SimpleNamespace(message=message)

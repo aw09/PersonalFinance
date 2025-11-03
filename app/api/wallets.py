@@ -5,7 +5,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
-from ..schemas import WalletCreate, WalletRead, WalletTransactionRequest, WalletUpdate
+from ..schemas import (
+    WalletCreate,
+    WalletRead,
+    WalletTransactionRequest,
+    WalletTransferRequest,
+    WalletTransferResponse,
+    WalletUpdate,
+)
 from ..services import (
     create_wallet,
     get_user,
@@ -15,6 +22,7 @@ from ..services import (
     update_wallet,
     wallet_adjust,
     wallet_deposit,
+    wallet_transfer,
     wallet_withdraw,
 )
 
@@ -141,6 +149,22 @@ async def wallet_adjust_endpoint(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     await session.refresh(wallet)
     return await _wallet_response(session, wallet)
+
+
+@router.post("/transfer", response_model=WalletTransferResponse)
+async def wallet_transfer_endpoint(
+    payload: WalletTransferRequest,
+    session: SessionDep,
+) -> WalletTransferResponse:
+    source_wallet = _ensure_wallet(await get_wallet(session, payload.source_wallet_id))
+    target_wallet = _ensure_wallet(await get_wallet(session, payload.target_wallet_id))
+    try:
+        updated_source, updated_target = await wallet_transfer(session, source_wallet, target_wallet, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    source_read = await _wallet_response(session, updated_source)
+    target_read = await _wallet_response(session, updated_target)
+    return WalletTransferResponse(source_wallet=source_read, target_wallet=target_read)
 
 
 @router.post("/{wallet_id}/set-default", response_model=WalletRead)

@@ -16,6 +16,8 @@ from .wallet import (
     WalletCreate,
     WalletRead,
     WalletTransactionRequest,
+    WalletTransferRequest,
+    WalletTransferResponse,
     WalletUpdate,
 )
 from .user import UserCreate, UserRead
@@ -37,4 +39,6 @@ __all__ = [
     "WalletRead",
     "WalletUpdate",
     "WalletTransactionRequest",
+    "WalletTransferRequest",
+    "WalletTransferResponse",
 ]

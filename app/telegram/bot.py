@@ -5,6 +5,7 @@ import calendar
 import contextlib
 import logging
 import re
+import textwrap
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -31,57 +32,68 @@ from ..models.transaction import TransactionType
 
 logger = logging.getLogger(__name__)
 
-HELP_OVERVIEW = (
-    "How I can help:\n"
-    "\n"
-    "• Quick capture: /add <type> <amount> <description>, free text like \"e lunch 12000\", or send a receipt photo (caption with @wallet to choose the wallet).\n"
-    "• Wallets: /wallet list, add, edit, default — manage regular, investment, and credit wallets.\n"
-    "• Debts & repayments: /lend, /repay, /owed keep track of who owes you and installment schedules.\n"
-    "• Reports: /report [range] for summaries, /recent [options] to browse transactions with pagination.\n"
-    "\n"
-    "Need details? Try /help wallet, /help add, /help recent, /help report, or /help debts."
+HELP_OVERVIEW = textwrap.dedent(
+    """
+    How I can help:
+
+    - Quick capture: /add <type> <amount> <description>, free text like "e lunch 12000", or send a receipt photo (caption with @wallet to choose the wallet).
+    - Wallets: /wallet list, add, edit, transfer, default - manage regular cash wallets, investment buckets, and credit accounts.
+    - Debts & repayments: /lend, /repay, /owed keep track of who owes you and installment schedules.
+    - Reports: /report [range] for summaries, /recent [options] to browse transactions with pagination.
+
+    Need details? Try /help wallet, /help add, /help recent, /help report, or /help debts.
+    """
 )
 
 HELP_TOPICS: dict[str, str] = {
-    "wallet": (
-        "Wallet commands:\n"
-        "• /wallet list — refresh and show all wallets with balances.\n"
-        "• /wallet add <name> <regular|investment|credit> [currency=IDR] "
-        "[limit=...] [settlement=day] [default=yes|no].\n"
-        "• /wallet edit <name> [name=...] [currency=...] [limit=...] "
-        "[settlement=day] [default=yes|no].\n"
-        "• /wallet default <name> — set the default wallet used by /add and quick entries.\n"
-        "Tips:\n"
-        "• Prefix transactions with @wallet (e.g. `/add @travel expense 150000 flight`).\n"
-        "• Credit wallets accept limit & settlement fields; investment wallets are great for savings."
+    "wallet": textwrap.dedent(
+        """
+        Wallet commands:
+        - /wallet list - refresh and show all wallets with balances.
+        - /wallet add <name> <regular|investment|credit> [currency=IDR] [limit=...] [settlement=day] [default=yes|no].
+        - /wallet edit <name> [name=...] [currency=...] [limit=...] [settlement=day] [default=yes|no].
+        - /wallet transfer <amount> <from> <to> [note] - move money between wallets (top up investments or pay down credit).
+        - /wallet default <name> - set the default wallet used by /add and quick entries.
+        Tips:
+        - Prefix transactions with @wallet (e.g. `/add @travel expense 150000 flight`).
+        - Investment wallets are ideal for savings goals-transfer from your main wallet when you set money aside.
+        - Credit wallets track outstanding card balances-transfer repayments from a cash wallet ahead of the settlement date.
+        """
     ),
-    "add": (
-        "Adding transactions:\n"
-        "• /add [@wallet] <expense|income|debt|receivable> <amount> <description>.\n"
-        "• Quick shorthand works: `e lunch 12000` or `@cash income 50000 bonus`.\n"
-        "• Amounts can contain commas or decimals (e.g. 1,250 or 45.67).\n"
-        "• When omitted, transactions land in your default wallet."
+    "add": textwrap.dedent(
+        """
+        Adding transactions:
+        - /add [@wallet] <expense|income|debt|receivable> <amount> <description>.
+        - Quick shorthand works: `e lunch 12000` or `@cash income 50000 bonus`.
+        - Amounts can contain commas or decimals (e.g. 1,250 or 45.67).
+        - When omitted, transactions land in your default wallet.
+        """
     ),
-    "recent": (
-        "Recent activity:\n"
-        "• /recent [@wallet] [limit=total] [per=page] [since=YYYY-MM-DD].\n"
-        "• `per` changes the page size (default 10). `limit` caps total rows fetched.\n"
-        "• Inline Next/Prev buttons let you page through older results.\n"
-        "• Combine with @wallet to focus on a specific wallet."
+    "recent": textwrap.dedent(
+        """
+        Recent activity:
+        - /recent [@wallet] [limit=total] [per=page] [since=YYYY-MM-DD].
+        - `per` changes the page size (default 10). `limit` caps total rows fetched.
+        - Inline Next/Prev buttons let you page through older results.
+        - Combine with @wallet to focus on a specific wallet.
+        """
     ),
-    "report": (
-        "Reports:\n"
-        "• /report [range] summarises expenses, income, debts, and receivables.\n"
-        "• Supported ranges: today, daily, mtd, ytd, last week/month/year, "
-        "and phrases like `last 3 months` or `last 14 days`.\n"
-        "• Output groups totals per currency and includes a net figure."
+    "report": textwrap.dedent(
+        """
+        Reports:
+        - /report [range] summarises expenses, income, debts, and receivables.
+        - Supported ranges: today, daily, mtd, ytd, last week/month/year, and phrases like `last 3 months` or `last 14 days`.
+        - Output groups totals per currency and includes a net figure.
+        """
     ),
-    "debts": (
-        "Debts & repayments:\n"
-        "• /lend <name> <amount> [note] — records a receivable and creates a debt schedule.\n"
-        "• /repay <name> <amount> [note|all] — applies repayments to outstanding installments.\n"
-        "• /owed [name] — shows who still owes you, including installment breakdowns.\n"
-        "• Repayments track partial payments and mark debts settled automatically."
+    "debts": textwrap.dedent(
+        """
+        Debts & repayments:
+        - /lend <name> <amount> [note] - records a receivable and creates a debt schedule.
+        - /repay <name> <amount> [note|all] - applies repayments to outstanding installments.
+        - /owed [name] - shows who still owes you, including installment breakdowns.
+        - Repayments track partial payments and mark debts settled automatically.
+        """
     ),
 }
 
@@ -275,7 +287,7 @@ async def _format_recent_line(
         if wallet:
             wallet_label = wallet.get("name")
     wallet_suffix = f" (wallet: {_escape_markdown(wallet_label)})" if wallet_label else ""
-    return f"- {occurred}: {tx_type} {amount_text} — *{description}*{wallet_suffix}"
+    return f"- {occurred}: {tx_type} {amount_text} - *{description}*{wallet_suffix}"
 
 
 async def _generate_recent_page(
@@ -424,6 +436,11 @@ class FinanceApiClient:
 
     async def set_default_wallet(self, wallet_id: str) -> dict[str, Any]:
         response = await self.client.post(f"/api/wallets/{wallet_id}/set-default")
+        response.raise_for_status()
+        return response.json()
+
+    async def transfer_wallets(self, payload: dict[str, Any]) -> dict[str, Any]:
+        response = await self.client.post("/api/wallets/transfer", json=payload)
         response.raise_for_status()
         return response.json()
 
@@ -1126,6 +1143,82 @@ async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text(f"Wallet '{wallet.get('name', target)}' updated.")
         return
 
+    if subcommand == "transfer":
+        if len(args) < 4:
+            await update.message.reply_text(
+                "Usage: /wallet transfer <amount> <from_wallet> <to_wallet> [note]"
+            )
+            return
+        amount_token = args[1].replace(",", "")
+        try:
+            amount = Decimal(amount_token)
+        except (InvalidOperation, ValueError):
+            await update.message.reply_text("Transfer amount must be a valid number.")
+            return
+        if amount <= 0:
+            await update.message.reply_text("Transfer amount must be positive.")
+            return
+        source_hint = args[2].lstrip("@")
+        target_hint = args[3].lstrip("@")
+        if not source_hint or not target_hint:
+            await update.message.reply_text(
+                "Provide both source and target wallets, e.g. `/wallet transfer 50000 Main Investment`."
+            )
+            return
+        note = " ".join(args[4:]).strip()
+        try:
+            source_wallet = await _get_wallet_by_name(context, api_client, user["id"], source_hint)
+            target_wallet = await _get_wallet_by_name(context, api_client, user["id"], target_hint)
+        except ValueError as exc:
+            await update.message.reply_text(str(exc))
+            return
+        if source_wallet.get("id") == target_wallet.get("id"):
+            await update.message.reply_text("Choose two different wallets for a transfer.")
+            return
+        transfer_payload: dict[str, Any] = {
+            "source_wallet_id": source_wallet["id"],
+            "target_wallet_id": target_wallet["id"],
+            "amount": str(amount.quantize(Decimal("0.01"))),
+        }
+        if note:
+            transfer_payload["description"] = note
+        try:
+            result = await api_client.transfer_wallets(transfer_payload)
+        except httpx.HTTPStatusError as exc:
+            await update.message.reply_text(f"Could not transfer between wallets: {exc.response.text}")
+            return
+        except Exception:
+            logger.exception("Failed to transfer between wallets via API")
+            await update.message.reply_text("Something went wrong while transferring between wallets.")
+            return
+        await _load_wallets(context, api_client, user["id"], refresh=True)
+        source_after = result.get("source_wallet", source_wallet)
+        target_after = result.get("target_wallet", target_wallet)
+        source_name = source_after.get("name", source_wallet.get("name", "Source wallet"))
+        target_name = target_after.get("name", target_wallet.get("name", "Target wallet"))
+        currency = source_after.get("currency", source_wallet.get("currency", "IDR"))
+        amount_text = _format_amount_for_display(str(amount.quantize(Decimal("0.01"))), currency)
+        lines = [
+            f"Transferred {amount_text} from {source_name} to {target_name}."
+        ]
+        source_balance = source_after.get("balance")
+        target_balance = target_after.get("balance")
+        if source_balance is not None:
+            lines.append(
+                f"{source_name} balance: {_format_amount_for_display(source_balance, source_after.get('currency', currency))}"
+            )
+        if target_balance is not None:
+            lines.append(
+                f"{target_name} balance: {_format_amount_for_display(target_balance, target_after.get('currency', currency))}"
+            )
+        target_type = (target_after.get("type") or "").lower()
+        if target_type == "investment":
+            lines.append("Investment wallet topped up. Keep building your savings!")
+        elif target_type == "credit":
+            lines.append("Credit wallet payment recorded. Remember to monitor the settlement date.")
+        await update.message.reply_text("\n".join(lines))
+        return
+
     if subcommand in {"default", "set-default"}:
         if len(args) < 2:
             await update.message.reply_text("Usage: /wallet default <name>")
@@ -1154,6 +1247,7 @@ async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         "Wallet usage:\n"
         "/wallet add <name> <regular|investment|credit> [currency=IDR] [limit=...] [settlement=day] [default=yes|no]\n"
         "/wallet edit <name> [name=new] [currency=...] [limit=...] [settlement=day]\n"
+        "/wallet transfer <amount> <from_wallet> <to_wallet> [note]\n"
         "/wallet default <name>\n"
         "/wallet list"
     )

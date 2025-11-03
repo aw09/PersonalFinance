@@ -18,6 +18,7 @@ from .wallets import (
     update_wallet,
     wallet_adjust,
     wallet_deposit,
+    wallet_transfer,
     wallet_withdraw,
 )
 
