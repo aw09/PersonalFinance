@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     """Centralised application settings, sourced from environment variables or .env."""
 
     app_name: str = Field(default="PersonalFinance")
+    environment: str = Field(default="development", alias="ENVIRONMENT")
     database_url: str = Field(alias="DATABASE_URL")
     gemini_api_key: Optional[str] = Field(
         default=None, alias="GEMINI_API_KEY", description="Google Generative AI key"

@@ -58,6 +58,7 @@ Every user starts with a “Main Wallet” (type `regular`) that acts as their d
 - `POST /api/wallets/{wallet_id}/deposit|withdraw|adjust` to move money in or out (each call creates a linked transaction)
 - `POST /api/wallets/transfer` to move money between two wallets (uses separate transactions for each side).
 - `POST /api/wallets/{wallet_id}/set-default` to change the default wallet for future transactions
+- Visit `/docs/rapidoc` for the interactive RapiDoc UI (powered by the same OpenAPI schema).
 
 Credit wallets accept optional `credit_limit` and `settlement_day` fields; investment wallets can be adjusted to reflect market value using the `adjust` endpoint.
 
