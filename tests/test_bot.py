@@ -62,6 +62,17 @@ class DummyMessage:
         self.reply_text = AsyncMock()
 
 
+
+class DummyCallbackQuery:
+    def __init__(self, data: str, *, from_user=None, message=None) -> None:
+        self.data = data
+        self.from_user = from_user
+        self.message = message
+        self.answer = AsyncMock()
+        self.edit_message_text = AsyncMock()
+
+
+
 class DummyFile:
     def __init__(self, data: bytes) -> None:
         self._data = data
@@ -307,14 +318,78 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
 
         self.assertIn('Transferred 50 K IDR', transfer_text)
         self.assertIn('Investment Fund', transfer_text)
+    async def test_wallet_command_menu_shows_keyboard(self) -> None:
+        message = DummyMessage('/wallet')
+        update = SimpleNamespace(
+            message=message,
+            effective_user=SimpleNamespace(id=528101001, full_name='Faris Tester'),
+        )
+        api_client = AsyncMock()
+        api_client.ensure_user.return_value = {'id': 'user-1'}
+        api_client.list_wallets.return_value = [
+            {
+                'id': 'w-main',
+                'name': 'Main Wallet',
+                'type': 'regular',
+                'balance': '0',
+                'currency': 'IDR',
+                'is_default': True,
+            }
+        ]
+        context = SimpleNamespace(
+            application=SimpleNamespace(bot_data={'api_client': api_client}),
+            args=[],
+            user_data={},
+        )
+
+        await bot.wallet_command(update, context)
+
+        message.reply_text.assert_awaited_once()
+        reply_kwargs = message.reply_text.await_args.kwargs
+        self.assertIsInstance(reply_kwargs.get('reply_markup'), InlineKeyboardMarkup)
+        self.assertIn('Wallets:', message.reply_text.await_args.args[0])
+
+    async def test_wallet_callback_list_shows_overview(self) -> None:
+        api_client = AsyncMock()
+        api_client.ensure_user.return_value = {'id': 'user-1'}
+        api_client.list_wallets.return_value = [
+            {
+                'id': 'w-main',
+                'name': 'Main Wallet',
+                'type': 'regular',
+                'balance': '0',
+                'currency': 'IDR',
+                'is_default': True,
+            }
+        ]
+        context = SimpleNamespace(
+            application=SimpleNamespace(bot_data={'api_client': api_client}),
+            user_data={},
+        )
+        query = DummyCallbackQuery(
+            f"{bot.WALLET_CALLBACK_PREFIX}list",
+            from_user=SimpleNamespace(id=528101001, full_name='Faris Tester'),
+        )
+        update = SimpleNamespace(callback_query=query)
+
+        await bot.wallet_callback(update, context)
+
+        query.edit_message_text.assert_awaited_once()
+        args = query.edit_message_text.await_args.args
+        self.assertIn('Wallets:', args[0])
+        kwargs = query.edit_message_text.await_args.kwargs
+        self.assertIsInstance(kwargs.get('reply_markup'), InlineKeyboardMarkup)
+
     async def test_help_command_lists_features(self) -> None:
         message = DummyMessage()
         update = SimpleNamespace(message=message)
         await bot.help_command(update, SimpleNamespace(args=[]))
         message.reply_text.assert_awaited_once()
         help_text = message.reply_text.await_args.args[0]
+        reply_markup = message.reply_text.await_args.kwargs.get("reply_markup")
         self.assertIn("Quick capture", help_text)
         self.assertIn("/help wallet", help_text)
+        self.assertIsInstance(reply_markup, InlineKeyboardMarkup)
 
     async def test_help_command_wallet_topic(self) -> None:
         message = DummyMessage()
@@ -324,6 +399,21 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
         help_text = message.reply_text.await_args.args[0]
         self.assertIn("/wallet add", help_text)
         self.assertIn("Prefix transactions with @wallet", help_text)
+
+
+    async def test_help_callback_wallet_topic(self) -> None:
+        message = DummyMessage()
+        query = DummyCallbackQuery(f"{bot.HELP_CALLBACK_PREFIX}wallet", from_user=SimpleNamespace(id=528101001, full_name="Faris Tester"), message=message)
+        context = SimpleNamespace(application=SimpleNamespace(bot_data={}), user_data={})
+        update = SimpleNamespace(callback_query=query)
+
+        await bot.help_callback(update, context)
+
+        query.edit_message_text.assert_awaited_once()
+        args = query.edit_message_text.await_args.args
+        self.assertIn("/wallet add", args[0])
+        kwargs = query.edit_message_text.await_args.kwargs
+        self.assertIsInstance(kwargs.get("reply_markup"), InlineKeyboardMarkup)
 
     async def test_help_command_unknown_topic(self) -> None:
         message = DummyMessage()

@@ -6,6 +6,7 @@ import contextlib
 import logging
 import re
 import textwrap
+import textwrap
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -13,7 +14,13 @@ from io import BytesIO
 from typing import Any
 
 import httpx
-from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import (
+    BotCommand,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ReplyKeyboardMarkup,
+    Update,
+)
 from telegram.constants import ParseMode
 from telegram.ext import (
     AIORateLimiter,
@@ -97,6 +104,8 @@ HELP_TOPICS: dict[str, str] = {
     ),
 }
 
+HELP_TOPICS["overview"] = HELP_OVERVIEW
+
 try:
     USER_TIMEZONE = ZoneInfo("Asia/Jakarta")
 except ZoneInfoNotFoundError:
@@ -126,6 +135,48 @@ RECENT_DEFAULT_LIMIT = 10
 RECENT_CALLBACK_PREFIX = "recent:"
 RECENT_CALLBACK_NEXT = "recent:next"
 RECENT_CALLBACK_PREV = "recent:prev"
+HELP_CALLBACK_PREFIX = "help:"
+WALLET_CALLBACK_PREFIX = "wallet:"
+
+MAIN_MENU_KEYBOARD = ReplyKeyboardMarkup(
+    [
+        ["/add", "/wallet"],
+        ["/recent", "/report"],
+        ["/owed", "/help"],
+    ],
+    resize_keyboard=True
+)
+
+HELP_INLINE_KEYBOARD = InlineKeyboardMarkup(
+    [
+        [
+            InlineKeyboardButton("Wallets", callback_data=f"{HELP_CALLBACK_PREFIX}wallet"),
+            InlineKeyboardButton("Add", callback_data=f"{HELP_CALLBACK_PREFIX}add"),
+        ],
+        [
+            InlineKeyboardButton("Recent", callback_data=f"{HELP_CALLBACK_PREFIX}recent"),
+            InlineKeyboardButton("Report", callback_data=f"{HELP_CALLBACK_PREFIX}report"),
+        ],
+        [
+            InlineKeyboardButton("Debts", callback_data=f"{HELP_CALLBACK_PREFIX}debts"),
+            InlineKeyboardButton("Overview", callback_data=f"{HELP_CALLBACK_PREFIX}overview"),
+        ],
+    ]
+)
+
+WALLET_INLINE_KEYBOARD = InlineKeyboardMarkup(
+    [
+        [InlineKeyboardButton("List wallets", callback_data=f"{WALLET_CALLBACK_PREFIX}list")],
+        [
+            InlineKeyboardButton("Add", callback_data=f"{WALLET_CALLBACK_PREFIX}add"),
+            InlineKeyboardButton("Transfer", callback_data=f"{WALLET_CALLBACK_PREFIX}transfer"),
+        ],
+        [
+            InlineKeyboardButton("Set default", callback_data=f"{WALLET_CALLBACK_PREFIX}default"),
+            InlineKeyboardButton("Help", callback_data=f"{HELP_CALLBACK_PREFIX}wallet"),
+        ],
+    ]
+)
 
 
 def _ensure_user_state(context: ContextTypes.DEFAULT_TYPE) -> dict[str, Any]:
@@ -495,17 +546,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Types: expense, income, debt, receivable.\n"
         "Prefix with `@wallet` to target a specific wallet (e.g. `/add @travel expense 200 taxi`).",
         parse_mode=ParseMode.MARKDOWN,
+        reply_markup=MAIN_MENU_KEYBOARD,
     )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
         return
-    topic = None
     args = getattr(context, "args", None)
-    if args:
-        topic = (args[0] or "").strip().lower()
+    topic = (args[0] or "").strip().lower() if args else None
     if topic:
+        if topic == "overview":
+            await update.message.reply_text(HELP_OVERVIEW, reply_markup=HELP_INLINE_KEYBOARD)
+            return
         help_text = HELP_TOPICS.get(topic)
         if help_text:
             await update.message.reply_text(help_text)
@@ -514,7 +567,17 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             f"No detailed help for '{topic}'. Try /help wallet, /help add, /help recent, /help report, or /help debts."
         )
         return
-    await update.message.reply_text(HELP_OVERVIEW)
+    await update.message.reply_text(HELP_OVERVIEW, reply_markup=HELP_INLINE_KEYBOARD)
+
+
+async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not query:
+        return
+    await query.answer()
+    topic = query.data.split(":", 1)[1] if ":" in query.data else "overview"
+    help_text = HELP_TOPICS.get(topic, HELP_OVERVIEW)
+    await query.edit_message_text(help_text, reply_markup=HELP_INLINE_KEYBOARD)
 
 
 async def add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -978,6 +1041,61 @@ def _format_wallet_overview(wallets: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+async def wallet_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not query:
+        return
+    await query.answer()
+    api_client: "FinanceApiClient" = context.application.bot_data["api_client"]
+    tele_user = query.from_user
+    try:
+        user = await api_client.ensure_user(tele_user.id, tele_user.full_name if tele_user else None)
+    except httpx.HTTPStatusError as exc:
+        logger.exception("Failed to ensure Telegram user in backend during wallet callback")
+        await query.edit_message_text(f"User sync error: {exc.response.text}")
+        return
+    except Exception:
+        logger.exception("Failed to ensure Telegram user in backend during wallet callback")
+        await query.edit_message_text("Could not sync your Telegram user with the backend.")
+        return
+
+    action = query.data.split(":", 1)[1] if ":" in query.data else "list"
+
+    if action == "list":
+        try:
+            wallets = await _load_wallets(context, api_client, user["id"], refresh=True)
+        except Exception:
+            logger.exception("Failed to load wallets during callback")
+            await query.edit_message_text("Could not load wallets right now.")
+            return
+        overview = _format_wallet_overview(wallets)
+        await query.edit_message_text(overview, parse_mode=ParseMode.MARKDOWN, reply_markup=WALLET_INLINE_KEYBOARD)
+        return
+
+    if action == "add":
+        message = (
+            "Use `/wallet add <name> <regular|investment|credit> [currency=IDR] "
+            "[limit=...] [settlement=day] [default=yes|no]` to create a wallet."
+        )
+        await query.edit_message_text(message, parse_mode=ParseMode.MARKDOWN, reply_markup=WALLET_INLINE_KEYBOARD)
+        return
+
+    if action == "transfer":
+        message = (
+            "Transfer funds with `/wallet transfer <amount> <from_wallet> <to_wallet> [note]`.\n"
+            "Example: `/wallet transfer 50000 Main Investment`."
+        )
+        await query.edit_message_text(message, parse_mode=ParseMode.MARKDOWN, reply_markup=WALLET_INLINE_KEYBOARD)
+        return
+
+    if action == "default":
+        message = "Change the default wallet with `/wallet default <name>`."
+        await query.edit_message_text(message, parse_mode=ParseMode.MARKDOWN, reply_markup=WALLET_INLINE_KEYBOARD)
+        return
+
+        await query.edit_message_text("Wallet command not recognised.", reply_markup=WALLET_INLINE_KEYBOARD)
+
+
 async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
         return
@@ -998,10 +1116,20 @@ async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     args = list(getattr(context, "args", []) or [])
-    if not args or args[0].lower() in {"list", "ls"}:
+    if not args or args[0].lower() in {"menu", "overview"}:
         wallets = await _load_wallets(context, api_client, user["id"], refresh=True)
         overview = _format_wallet_overview(wallets)
-        await update.message.reply_text(overview, parse_mode=ParseMode.MARKDOWN)
+        user_state = _ensure_user_state(context)
+        user_state["wallet_user_id"] = user["id"]
+        await update.message.reply_text(overview, parse_mode=ParseMode.MARKDOWN, reply_markup=WALLET_INLINE_KEYBOARD)
+        return
+
+    if args[0].lower() in {"list", "ls"}:
+        wallets = await _load_wallets(context, api_client, user["id"], refresh=True)
+        overview = _format_wallet_overview(wallets)
+        user_state = _ensure_user_state(context)
+        user_state["wallet_user_id"] = user["id"]
+        await update.message.reply_text(overview, parse_mode=ParseMode.MARKDOWN, reply_markup=WALLET_INLINE_KEYBOARD)
         return
 
     subcommand = args[0].lower()
@@ -1579,6 +1707,8 @@ def _create_application(token: str, api_client: FinanceApiClient) -> Application
     application.add_handler(CommandHandler("report", report))
     application.add_handler(CommandHandler("recent", recent))
     application.add_handler(CommandHandler(["wallet", "wallets"], wallet_command))
+    application.add_handler(CallbackQueryHandler(help_callback, pattern=f"^{HELP_CALLBACK_PREFIX}"))
+    application.add_handler(CallbackQueryHandler(wallet_callback, pattern=f"^{WALLET_CALLBACK_PREFIX}"))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, free_text_transaction))
     application.add_handler(MessageHandler(filters.PHOTO, receipt_photo))
     application.add_handler(CallbackQueryHandler(recent_callback, pattern=f"^{RECENT_CALLBACK_PREFIX}"))
