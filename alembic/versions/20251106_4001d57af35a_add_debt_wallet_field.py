@@ -1,14 +1,19 @@
-"""Add wallet linkage and beneficiary to debts"""
+"""add debt wallet field
+
+Revision ID: 4001d57af35a
+Revises: 8d06157bb5cf
+Create Date: 2025-11-06 18:24:31.788034
+"""
+
+from alembic import op
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
+
 
 from collections.abc import Sequence
 
-import sqlalchemy as sa
-from alembic import op
-from sqlalchemy.dialects import postgresql
-
-# revision identifiers, used by Alembic.
-revision = "20251103_add_debt_wallet_fields"
-down_revision = "20251102_8d06157bb5cf"
+revision: str = "4001d57af35a"
+down_revision: str | None = '8d06157bb5cf'
 branch_labels: Sequence[str] | None = None
 depends_on: Sequence[str] | None = None
 

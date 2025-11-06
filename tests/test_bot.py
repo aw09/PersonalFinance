@@ -166,6 +166,40 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
         self.assertEqual(payload["type"], "expense")
         self.assertEqual(payload["description"], "indomaret")
 
+    async def test_free_text_multi_word_wallet_hint(self) -> None:
+        message = DummyMessage("@Main Wallet expense 75000 dinner")
+        update = SimpleNamespace(
+            message=message,
+            effective_user=SimpleNamespace(id=528101001, full_name="Faris Tester"),
+        )
+        api_client = AsyncMock()
+        api_client.ensure_user.return_value = {"id": str(UUID("11111111-2222-3333-4444-555555555555"))}
+        api_client.create_transaction.return_value = {
+            "type": "expense",
+            "amount": "75000.00",
+            "currency": "IDR",
+            "description": "dinner",
+            "wallet_id": "w-main",
+        }
+        api_client.list_wallets.return_value = [
+            {
+                "id": "w-main",
+                "name": "Main Wallet",
+                "type": "regular",
+                "currency": "IDR",
+            }
+        ]
+        context = SimpleNamespace(
+            application=SimpleNamespace(bot_data={"api_client": api_client}),
+            user_data={},
+        )
+
+        await bot.free_text_transaction(update, context)
+
+        api_client.create_transaction.assert_awaited_once()
+        payload = api_client.create_transaction.await_args.args[0]
+        self.assertEqual(payload.get("wallet_id"), "w-main")
+
     async def test_receipt_photo_parses_image(self) -> None:
         photo_data = b"fake-image"
         message = DummyMessage(photo=[DummyPhoto(photo_data)])

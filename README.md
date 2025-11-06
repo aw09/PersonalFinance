@@ -114,6 +114,40 @@ LLM_RECEIPT_PROMPT_PATH=prompts/receipt_prompt.txt
 python -m unittest discover -s tests -p "test_*.py"
 ```
 
+## Telegram integration test
+
+For end-to-end verification against the **production** Telegram bot (real backend + real Telegram traffic), use the Telethon script in `integration_tests/telegram_bot/repay_flow.py`. It signs in as a normal Telegram user, ensures wallets exist, and walks through the credit repayment flow via the live bot—ideal for manual smoke tests without touching the webhook code.
+
+1. Export the required Telegram credentials (no wallet-specific variables are needed—the script creates test wallets as required):
+   ```bash
+   export TELEGRAM_TEST_API_ID=123456
+   export TELEGRAM_TEST_API_HASH=abc123yourhash
+   export TELEGRAM_TEST_PHONE=+621234567890
+   export TELEGRAM_MAIN_BOT_USERNAME=@PersonalFinanceBot
+   # optional: TELEGRAM_TEST_PASSWORD=your-telegram-2fa-password (if 2-step verification enabled)
+   # optional: TELEGRAM_TEST_SESSION=/path/to/session.file to override the saved session location
+   ```
+2. Install dependencies (`telethon` is already listed in `requirements.txt`).
+3. Run whichever integration script you need:
+   ```bash
+   # Full repayment flow (wallet button navigation + confirm inline button)
+   python integration_tests/telegram_bot/repay_flow.py
+
+   # General smoke covering /start, /help, /add, /recent, /report, /owed, wallet statements, etc.
+   python integration_tests/telegram_bot/basic_flows.py
+
+   # Advanced scenarios: credit purchase/installments, credit repay with @wallet source, lend/repay sequences
+   python integration_tests/telegram_bot/advanced_flows.py
+   ```
+   On first run you will be prompted for the Telegram login code sent to the test phone number (and, if 2-step verification is enabled, the password—either via `TELEGRAM_TEST_PASSWORD` or an interactive prompt). Subsequent runs reuse the saved session.
+
+The script will:
+- Send `/wallet list`, auto-create missing regular/investment/credit wallets via `/wallet add`.
+- Execute `/wallet credit repay` and answer every prompt (wallet selection, amount, source wallet, notes, beneficiary) before tapping the inline **Confirm** button.
+- Wait for the “Applied repayment…” confirmation from the real bot.
+
+Extend `integration_tests/telegram_bot/` with additional flows as required (e.g., `/add`, `/recent`) to keep your manual smoke tests close to the codebase.
+
 ## Development notes
 
 - Database migrations are handled with Alembic. Use `alembic revision --autogenerate -m "message"` to create new migrations when models change.
