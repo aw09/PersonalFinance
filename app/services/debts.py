@@ -37,6 +37,9 @@ async def create_debt(session: AsyncSession, payload: DebtCreate) -> Debt:
         start_date=payload.start_date,
         interest_rate=payload.interest_rate,
         user_id=payload.user_id,
+        category=payload.category,
+        wallet_id=payload.wallet_id,
+        beneficiary_name=payload.beneficiary_name,
     )
     session.add(debt)
     await session.flush()
@@ -136,3 +139,40 @@ async def mark_installment_paid(
 
 async def get_installment(session: AsyncSession, installment_id: UUID) -> Optional[DebtInstallment]:
     return await session.get(DebtInstallment, installment_id)
+
+
+def installment_remaining(installment: DebtInstallment) -> Decimal:
+    """Return the outstanding amount for an installment."""
+    total_amount = Decimal(str(installment.amount))
+    paid_amount = Decimal(str(installment.paid_amount or 0))
+    remaining = total_amount - paid_amount
+    if remaining <= Decimal("0"):
+        return Decimal("0.00")
+    return remaining.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def debt_outstanding(debt: Debt) -> Decimal:
+    """Aggregate remaining balance for a debt."""
+    balance = Decimal("0")
+    for installment in debt.installments:
+        balance += installment_remaining(installment)
+    return balance.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+async def list_debts_for_wallet(
+    session: AsyncSession,
+    wallet_id: UUID,
+    *,
+    include_inactive: bool = False,
+) -> list[Debt]:
+    """List debts linked to a specific wallet."""
+    stmt = (
+        select(Debt)
+        .options(selectinload(Debt.installments).selectinload(DebtInstallment.payments))
+        .where(Debt.wallet_id == wallet_id)
+        .order_by(Debt.created_at.desc())
+    )
+    if not include_inactive:
+        stmt = stmt.where(Debt.status == "active")
+    result = await session.execute(stmt)
+    return result.scalars().unique().all()

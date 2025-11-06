@@ -32,7 +32,10 @@ from telegram.ext import (
     filters,
 )
 
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+try:
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+except ImportError:  # pragma: no cover - fallback for Python < 3.9 in tests
+    from backports.zoneinfo import ZoneInfo, ZoneInfoNotFoundError  # type: ignore
 
 from ..config import get_settings
 from ..models.transaction import TransactionType
@@ -44,7 +47,7 @@ HELP_OVERVIEW = textwrap.dedent(
     How I can help:
 
     - Quick capture: /add <type> <amount> <description>, free text like "e lunch 12000", or send a receipt photo (caption with @wallet to choose the wallet).
-    - Wallets: /wallet list, add, edit, transfer, default - manage regular cash wallets, investment buckets, and credit accounts.
+    - Wallets: /wallet list, add, edit, transfer, default - manage cash, investment ROE, and credit card statements or instalments.
     - Debts & repayments: /lend, /repay, /owed keep track of who owes you and installment schedules.
     - Reports: /report [range] for summaries, /recent [options] to browse transactions with pagination.
 
@@ -56,15 +59,19 @@ HELP_TOPICS: dict[str, str] = {
     "wallet": textwrap.dedent(
         """
         Wallet commands:
-        - /wallet list - refresh and show all wallets with balances.
+        - /wallet list - refresh and show all wallets with balances (credit wallets highlight upcoming settlements).
         - /wallet add <name> <regular|investment|credit> [currency=IDR] [limit=...] [settlement=day] [default=yes|no].
         - /wallet edit <name> [name=...] [currency=...] [limit=...] [settlement=day] [default=yes|no].
         - /wallet transfer <amount> <from> <to> [note] - move money between wallets (top up investments or pay down credit).
         - /wallet default <name> - set the default wallet used by /add and quick entries.
+        - /wallet credit purchase <wallet> <amount> [installments=3] [beneficiary=Name] [desc=...] - record a card purchase and split it into installments.
+        - /wallet credit repay <wallet> <amount> [from=@wallet] [beneficiary=Name] [desc=...] - repay a card from another wallet and allocate to installments.
+        - /wallet credit statement <wallet> [reference=YYYY-MM-DD] - show the upcoming settlement amount and due installments.
+        - /wallet investment roe <wallet> [start=YYYY-MM-DD] [end=YYYY-MM-DD] - calculate simple return on equity for an investment wallet.
         Tips:
         - Prefix transactions with @wallet (e.g. `/add @travel expense 150000 flight`).
-        - Investment wallets are ideal for savings goals-transfer from your main wallet when you set money aside.
-        - Credit wallets track outstanding card balances-transfer repayments from a cash wallet ahead of the settlement date.
+        - Investment wallets: transfer contributions from cash wallets and review ROE each month.
+        - Credit wallets: keep settlement day updated, use statements to see what is due, and repay from your main wallet.
         """
     ),
     "add": textwrap.dedent(
@@ -172,6 +179,10 @@ WALLET_INLINE_KEYBOARD = InlineKeyboardMarkup(
             InlineKeyboardButton("Transfer", callback_data=f"{WALLET_CALLBACK_PREFIX}transfer"),
         ],
         [
+            InlineKeyboardButton("Statement", callback_data=f"{WALLET_CALLBACK_PREFIX}statement"),
+            InlineKeyboardButton("ROE", callback_data=f"{WALLET_CALLBACK_PREFIX}roe"),
+        ],
+        [
             InlineKeyboardButton("Set default", callback_data=f"{WALLET_CALLBACK_PREFIX}default"),
             InlineKeyboardButton("Help", callback_data=f"{HELP_CALLBACK_PREFIX}wallet"),
         ],
@@ -188,7 +199,8 @@ def _ensure_user_state(context: ContextTypes.DEFAULT_TYPE) -> dict[str, Any]:
 
 
 def _normalise_wallet_key(name: str) -> str:
-    return re.sub(r"\s+", " ", name).strip().casefold()
+    cleaned = name.replace("_", " ")
+    return re.sub(r"\s+", " ", cleaned).strip().casefold()
 
 
 def _escape_markdown(text: str) -> str:
@@ -214,6 +226,35 @@ async def _load_wallets(
             if wallet.get("name")
         }
     return cache.get("list", [])
+
+
+async def _prefetch_credit_statements(
+    context: ContextTypes.DEFAULT_TYPE,
+    api_client: FinanceApiClient,
+    user_id: str,
+    wallets: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    statements: dict[str, dict[str, Any]] = {}
+    for wallet in wallets:
+        if wallet.get("type") != "credit":
+            continue
+        wallet_id = wallet.get("id")
+        if not wallet_id:
+            continue
+        try:
+            statement = await api_client.credit_statement(wallet_id)
+        except httpx.HTTPStatusError as exc:
+            logger.exception(
+                "Failed to fetch credit statement (HTTP error) for wallet %s: %s",
+                wallet.get("name"),
+                exc.response.text if hasattr(exc, "response") else exc,
+            )
+            continue
+        except Exception:
+            logger.exception("Failed to fetch credit statement for wallet %s", wallet.get("name"))
+            continue
+        statements[wallet_id] = statement
+    return statements
 
 
 async def _get_wallet_by_name(
@@ -492,6 +533,51 @@ class FinanceApiClient:
 
     async def transfer_wallets(self, payload: dict[str, Any]) -> dict[str, Any]:
         response = await self.client.post("/api/wallets/transfer", json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    async def credit_purchase(self, wallet_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        response = await self.client.post(f"/api/wallets/{wallet_id}/credit/purchase", json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    async def credit_repayment(self, wallet_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        response = await self.client.post(f"/api/wallets/{wallet_id}/credit/repay", json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    async def credit_statement(
+        self,
+        wallet_id: str,
+        *,
+        reference_date: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if reference_date:
+            params["reference_date"] = reference_date
+        response = await self.client.get(
+            f"/api/wallets/{wallet_id}/credit/statement",
+            params=params or None,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def investment_roe(
+        self,
+        wallet_id: str,
+        *,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if start_date:
+            params["start_date"] = start_date
+        if end_date:
+            params["end_date"] = end_date
+        response = await self.client.get(
+            f"/api/wallets/{wallet_id}/investment/roe",
+            params=params or None,
+        )
         response.raise_for_status()
         return response.json()
 
@@ -1000,7 +1086,11 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(summary)
 
 
-def _format_wallet_overview(wallets: list[dict[str, Any]]) -> str:
+def _format_wallet_overview(
+    wallets: list[dict[str, Any]],
+    *,
+    credit_statements: dict[str, dict[str, Any]] | None = None,
+) -> str:
     if not wallets:
         return (
             "You do not have any wallets yet. Create one with "
@@ -1011,6 +1101,7 @@ def _format_wallet_overview(wallets: list[dict[str, Any]]) -> str:
         key=lambda w: (not w.get("is_default", False), w.get("name", "").lower()),
     )
     lines = ["Wallets:"]
+    today = _local_today()
     for wallet in sorted_wallets:
         raw_name = wallet.get("name", "Unnamed")
         name = _escape_markdown(raw_name)
@@ -1030,6 +1121,41 @@ def _format_wallet_overview(wallets: list[dict[str, Any]]) -> str:
         settlement_day = wallet.get("settlement_day")
         if settlement_day:
             extras.append(f"settles day {settlement_day}")
+        if wallet_type == "credit" and credit_statements:
+            statement = credit_statements.get(wallet.get("id"))
+            if statement:
+                amount_due = statement.get("amount_due", "0")
+                minimum_due = statement.get("minimum_due", "0")
+                amount_text = _format_amount_for_display(amount_due, currency)
+                try:
+                    settlement_date = date.fromisoformat(str(statement.get("settlement_date")))
+                except Exception:
+                    settlement_date = None
+                status_text = "no settlement date"
+                if settlement_date:
+                    delta_days = (settlement_date - today).days
+                    if delta_days < 0:
+                        status_text = f"overdue by {abs(delta_days)} day(s)"
+                    elif delta_days == 0:
+                        status_text = "due today"
+                    elif delta_days == 1:
+                        status_text = "due tomorrow"
+                    elif delta_days <= 5:
+                        status_text = f"due in {delta_days} days"
+                    else:
+                        status_text = f"due {settlement_date.isoformat()}"
+                extras.append(
+                    f"bill {amount_text} ({status_text})"
+                )
+                try:
+                    minimum_decimal = Decimal(str(minimum_due))
+                    amount_decimal = Decimal(str(amount_due))
+                except (InvalidOperation, ValueError):
+                    minimum_decimal = amount_decimal = None
+                if minimum_decimal is not None and amount_decimal is not None and minimum_decimal < amount_decimal:
+                    extras.append(
+                        f"minimum {_format_amount_for_display(minimum_due, currency)}"
+                    )
         if extras:
             extras_text = ", ".join(_escape_markdown(item) for item in extras)
             parts += f" ({extras_text})"
@@ -1063,19 +1189,31 @@ async def wallet_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     if action == "list":
         try:
-            wallets = await _load_wallets(context, api_client, user["id"], refresh=True)
+            await _send_wallet_overview(update, context, api_client, user["id"], refresh=True)
         except Exception:
             logger.exception("Failed to load wallets during callback")
             await query.edit_message_text("Could not load wallets right now.")
-            return
-        overview = _format_wallet_overview(wallets)
-        await query.edit_message_text(overview, parse_mode=ParseMode.MARKDOWN, reply_markup=WALLET_INLINE_KEYBOARD)
         return
 
     if action == "add":
         message = (
             "Use `/wallet add <name> <regular|investment|credit> [currency=IDR] "
             "[limit=...] [settlement=day] [default=yes|no]` to create a wallet."
+        )
+        await query.edit_message_text(message, parse_mode=ParseMode.MARKDOWN, reply_markup=WALLET_INLINE_KEYBOARD)
+        return
+
+    if action == "statement":
+        message = (
+            "Show card bills with `/wallet credit statement <wallet> [reference=YYYY-MM-DD]`."
+        )
+        await query.edit_message_text(message, parse_mode=ParseMode.MARKDOWN, reply_markup=WALLET_INLINE_KEYBOARD)
+        return
+
+    if action == "roe":
+        message = (
+            "Check investment performance with `/wallet investment roe <wallet> "
+            "[start=YYYY-MM-DD] [end=YYYY-MM-DD]`."
         )
         await query.edit_message_text(message, parse_mode=ParseMode.MARKDOWN, reply_markup=WALLET_INLINE_KEYBOARD)
         return
@@ -1093,7 +1231,34 @@ async def wallet_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await query.edit_message_text(message, parse_mode=ParseMode.MARKDOWN, reply_markup=WALLET_INLINE_KEYBOARD)
         return
 
-        await query.edit_message_text("Wallet command not recognised.", reply_markup=WALLET_INLINE_KEYBOARD)
+    await query.edit_message_text("Wallet command not recognised.", reply_markup=WALLET_INLINE_KEYBOARD)
+
+
+async def _send_wallet_overview(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    api_client: FinanceApiClient,
+    user_id: str,
+    *,
+    refresh: bool = False,
+) -> None:
+    wallets = await _load_wallets(context, api_client, user_id, refresh=refresh)
+    credit_statements: dict[str, dict[str, Any]] = {}
+    if wallets:
+        credit_statements = await _prefetch_credit_statements(context, api_client, user_id, wallets)
+    overview = _format_wallet_overview(wallets, credit_statements=credit_statements)
+    user_state = _ensure_user_state(context)
+    user_state["wallet_user_id"] = user_id
+    message_obj = getattr(update, "message", None)
+    callback_obj = getattr(update, "callback_query", None)
+    if message_obj is not None:
+        await message_obj.reply_text(overview, parse_mode=ParseMode.MARKDOWN, reply_markup=WALLET_INLINE_KEYBOARD)
+    elif callback_obj is not None:
+        await callback_obj.edit_message_text(
+            overview,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=WALLET_INLINE_KEYBOARD,
+        )
 
 
 async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1117,22 +1282,22 @@ async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     args = list(getattr(context, "args", []) or [])
     if not args or args[0].lower() in {"menu", "overview"}:
-        wallets = await _load_wallets(context, api_client, user["id"], refresh=True)
-        overview = _format_wallet_overview(wallets)
-        user_state = _ensure_user_state(context)
-        user_state["wallet_user_id"] = user["id"]
-        await update.message.reply_text(overview, parse_mode=ParseMode.MARKDOWN, reply_markup=WALLET_INLINE_KEYBOARD)
+        await _send_wallet_overview(update, context, api_client, user["id"], refresh=True)
         return
 
     if args[0].lower() in {"list", "ls"}:
-        wallets = await _load_wallets(context, api_client, user["id"], refresh=True)
-        overview = _format_wallet_overview(wallets)
-        user_state = _ensure_user_state(context)
-        user_state["wallet_user_id"] = user["id"]
-        await update.message.reply_text(overview, parse_mode=ParseMode.MARKDOWN, reply_markup=WALLET_INLINE_KEYBOARD)
+        await _send_wallet_overview(update, context, api_client, user["id"], refresh=True)
         return
 
     subcommand = args[0].lower()
+
+    if subcommand == "credit":
+        await _handle_wallet_credit(update, context, api_client, user, args[1:])
+        return
+
+    if subcommand in {"investment", "invest"}:
+        await _handle_wallet_investment(update, context, api_client, user, args[1:])
+        return
 
     if subcommand == "add":
         if len(args) < 3:
@@ -1861,6 +2026,33 @@ def _extract_amount_from_tokens(tokens: list[str]) -> tuple[int, Decimal]:
     raise ValueError("Could not find an amount in your command. Place it at the end.")
 
 
+def _partition_option_tokens(tokens: list[str]) -> tuple[dict[str, str], list[str]]:
+    """Split tokens into key=value options and free-text tokens."""
+    options: dict[str, str] = {}
+    free_tokens: list[str] = []
+    for token in tokens:
+        if "=" in token:
+            key, value = token.split("=", 1)
+            options[key.strip().lower()] = value.strip()
+        else:
+            free_tokens.append(token)
+    return options, free_tokens
+
+
+def _parse_amount_token(raw: str) -> Decimal:
+    try:
+        return Decimal(raw.replace(",", ""))
+    except (InvalidOperation, ValueError) as exc:
+        raise ValueError(f"Invalid amount '{raw}'.") from exc
+
+
+def _parse_iso_date(value: str) -> date:
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError("Dates must be in YYYY-MM-DD format.") from exc
+
+
 def _normalise_name(name: str) -> str:
     return name.strip().lower()
 
@@ -1915,7 +2107,7 @@ def _format_installment_detail(installment: dict[str, Any]) -> list[str]:
 
     due_date = installment.get("due_date") or "n/a"
     lines.append(
-        f"  • Installment #{installment.get('installment_number', '?')} due {due_date}: "
+        f"  - Installment #{installment.get('installment_number', '?')} due {due_date}: "
         f"{_format_amount_for_display(remaining, 'IDR')} remaining"
     )
 
@@ -2082,3 +2274,414 @@ def _build_report_summary(
 
     return "\n".join(lines)
 
+def _format_credit_statement_message(wallet: dict[str, Any], statement: dict[str, Any]) -> str:
+    currency = wallet.get("currency", "IDR")
+    wallet_name = _escape_markdown(wallet.get("name", "Unnamed"))
+    period_start = _escape_markdown(str(statement.get("period_start")))
+    period_end = _escape_markdown(str(statement.get("period_end")))
+    settlement = _escape_markdown(str(statement.get("settlement_date")))
+    amount_due_text = _escape_markdown(
+        _format_amount_for_display(statement.get("amount_due", "0"), currency)
+    )
+    minimum_due_value = statement.get("minimum_due", "0")
+    minimum_due_text = _escape_markdown(
+        _format_amount_for_display(minimum_due_value, currency)
+    )
+    amount_due_value = statement.get("amount_due", "0")
+
+    lines = [
+        f"*{wallet_name} credit statement*",
+        f"Period: {period_start} - {period_end}",
+        f"Settlement: {settlement}",
+        f"Amount due: {amount_due_text}",
+    ]
+    try:
+        minimum_decimal = Decimal(str(minimum_due_value))
+        amount_decimal = Decimal(str(amount_due_value))
+    except (InvalidOperation, ValueError):
+        minimum_decimal = amount_decimal = None
+    if minimum_decimal is not None and amount_decimal is not None and minimum_decimal < amount_decimal:
+        lines.append(f"Minimum due: {minimum_due_text}")
+
+    installments = statement.get("installments") or []
+    if installments:
+        lines.append("")
+        lines.append("Due installments:")
+        for installment in installments:
+            number = installment.get("installment_number", "?")
+            due_date = installment.get("due_date", "n/a")
+            inst_amount = _escape_markdown(
+                _format_amount_for_display(installment.get("amount_due", "0"), currency)
+            )
+            lines.append(f"- #{number} due {due_date}: {inst_amount}")
+    else:
+        lines.append("")
+        lines.append("No installments due for this cycle.")
+
+    return "\n".join(lines)
+
+
+async def _handle_wallet_credit(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    api_client: FinanceApiClient,
+    user: dict[str, Any],
+    args: list[str],
+) -> None:
+    message = update.message
+    if not message:
+        return
+    if not args:
+        await message.reply_text(
+            "Usage: /wallet credit <purchase|repay|statement> <wallet> ..."
+        )
+        return
+
+    action = args[0].lower()
+    if action not in {"purchase", "repay", "statement"}:
+        await message.reply_text(
+            "Unknown credit command. Use purchase, repay, or statement."
+        )
+        return
+
+    if len(args) < 2:
+        await message.reply_text("Please specify which credit wallet to use.")
+        return
+
+    wallet_hint = args[1].lstrip("@")
+    try:
+        wallet_record = await _get_wallet_by_name(context, api_client, user["id"], wallet_hint)
+    except ValueError as exc:
+        await message.reply_text(str(exc))
+        return
+
+    if wallet_record.get("type") != "credit":
+        await message.reply_text(
+            f"Wallet '{wallet_record.get('name')}' is not a credit wallet."
+        )
+        return
+
+    if action == "statement":
+        option_tokens, _ = _partition_option_tokens(args[2:])
+        reference_token = option_tokens.get("reference") or option_tokens.get("date")
+        reference_value: str | None = None
+        if reference_token:
+            try:
+                reference_value = _parse_iso_date(reference_token).isoformat()
+            except ValueError as exc:
+                await message.reply_text(str(exc))
+                return
+        try:
+            statement = await api_client.credit_statement(
+                wallet_record["id"],
+                reference_date=reference_value,
+            )
+        except httpx.HTTPStatusError as exc:
+            await message.reply_text(f"Could not fetch statement: {exc.response.text}")
+            return
+        except Exception:
+            logger.exception("Failed to fetch credit statement via bot")
+            await message.reply_text("Something went wrong while fetching the statement.")
+            return
+
+        text = _format_credit_statement_message(wallet_record, statement)
+        await message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        return
+
+    if action == "purchase":
+        if len(args) < 3:
+            await message.reply_text(
+                "Usage: /wallet credit purchase <wallet> <amount> [installments=3] [beneficiary=Name] [desc=...]"
+            )
+            return
+        try:
+            amount = _parse_amount_token(args[2])
+        except ValueError as exc:
+            await message.reply_text(str(exc))
+            return
+        options, free_tokens = _partition_option_tokens(args[3:])
+        description = " ".join(free_tokens).strip()
+        if options.get("desc"):
+            description = options["desc"]
+        installment_token = (
+            options.get("installments")
+            or options.get("installment")
+            or options.get("inst")
+        )
+        installments = 1
+        if installment_token:
+            try:
+                installments = int(installment_token)
+            except ValueError:
+                await message.reply_text("Installments must be a number, e.g. installments=3.")
+                return
+            if installments <= 0:
+                await message.reply_text("Installments must be at least 1.")
+                return
+        occurred_token = options.get("date") or options.get("occurred") or options.get("occurred_at")
+        if occurred_token:
+            try:
+                occurred_at = _parse_iso_date(occurred_token)
+            except ValueError as exc:
+                await message.reply_text(str(exc))
+                return
+        else:
+            occurred_at = _local_today()
+        beneficiary = options.get("beneficiary")
+
+        payload: dict[str, Any] = {
+            "amount": str(amount.quantize(Decimal("0.01"))),
+            "installments": installments,
+            "occurred_at": occurred_at.isoformat(),
+        }
+        if description:
+            payload["description"] = description
+        if beneficiary:
+            payload["beneficiary_name"] = beneficiary
+
+        try:
+            debt = await api_client.credit_purchase(wallet_record["id"], payload)
+        except httpx.HTTPStatusError as exc:
+            await message.reply_text(f"Could not record credit purchase: {exc.response.text}")
+            return
+        except Exception:
+            logger.exception("Failed to record credit purchase via bot")
+            await message.reply_text("Something went wrong while saving the credit purchase.")
+            return
+
+        installments_data = debt.get("installments") or []
+        next_installment_text = None
+        if installments_data:
+            try:
+                first_due = min(
+                    installments_data,
+                    key=lambda inst: inst.get("due_date") or "9999-12-31",
+                )
+                due_date = first_due.get("due_date", "n/a")
+                amount_due = _format_amount_for_display(first_due.get("amount", "0"), wallet_record.get("currency", "IDR"))
+                next_installment_text = f"First installment #{first_due.get('installment_number', '?')} due {due_date} ({amount_due})."
+            except Exception:
+                next_installment_text = None
+
+        amount_text = _escape_markdown(
+            _format_amount_for_display(amount, wallet_record.get("currency", "IDR"))
+        )
+        lines = [
+            f"Recorded credit purchase of {amount_text} on {occurred_at.isoformat()} for {_escape_markdown(wallet_record.get('name', 'wallet'))}."
+        ]
+        if description:
+            lines.append(f"Note: {_escape_markdown(description)}")
+        if beneficiary:
+            lines.append(f"Beneficiary: {_escape_markdown(beneficiary)}")
+        lines.append(f"Installments created: {installments}.")
+        if next_installment_text:
+            lines.append(_escape_markdown(next_installment_text))
+
+        await message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+        await _load_wallets(context, api_client, user["id"], refresh=True)
+        return
+
+    # action == "repay"
+    if len(args) < 3:
+        await message.reply_text(
+            "Usage: /wallet credit repay <wallet> <amount> [from=@wallet] [beneficiary=Name] [desc=...]"
+        )
+        return
+    try:
+        amount = _parse_amount_token(args[2])
+    except ValueError as exc:
+        await message.reply_text(str(exc))
+        return
+    options, free_tokens = _partition_option_tokens(args[3:])
+    description = " ".join(free_tokens).strip()
+    if options.get("desc"):
+        description = options["desc"]
+    occurred_token = options.get("date") or options.get("occurred") or options.get("occurred_at")
+    if occurred_token:
+        try:
+            occurred_at = _parse_iso_date(occurred_token)
+        except ValueError as exc:
+            await message.reply_text(str(exc))
+            return
+    else:
+        occurred_at = _local_today()
+    beneficiary = options.get("beneficiary")
+
+    source_hint = options.get("from") or options.get("source")
+    source_wallet_record: dict[str, Any] | None = None
+    if source_hint:
+        normalised = source_hint.lstrip("@")
+        try:
+            source_wallet_record = await _get_wallet_by_name(context, api_client, user["id"], normalised)
+        except ValueError as exc:
+            await message.reply_text(str(exc))
+            return
+
+    payload: dict[str, Any] = {
+        "amount": str(amount.quantize(Decimal("0.01"))),
+        "occurred_at": occurred_at.isoformat(),
+    }
+    if description:
+        payload["description"] = description
+    if beneficiary:
+        payload["beneficiary_name"] = beneficiary
+    if source_wallet_record:
+        payload["source_wallet_id"] = source_wallet_record.get("id")
+
+    try:
+        repayment = await api_client.credit_repayment(wallet_record["id"], payload)
+    except httpx.HTTPStatusError as exc:
+        await message.reply_text(f"Could not record repayment: {exc.response.text}")
+        return
+    except Exception:
+        logger.exception("Failed to record credit repayment via bot")
+        await message.reply_text("Something went wrong while saving the repayment.")
+        return
+
+    currency = wallet_record.get("currency", "IDR")
+    amount_text = _escape_markdown(_format_amount_for_display(amount, currency))
+    wallet_label = _escape_markdown(wallet_record.get("name", "wallet"))
+    source_label = None
+    if repayment.get("source_wallet"):
+        source_label = _escape_markdown(repayment["source_wallet"].get("name", ""))
+    elif source_wallet_record:
+        source_label = _escape_markdown(source_wallet_record.get("name", ""))
+
+    lines = [f"Applied repayment of {amount_text} to {wallet_label}."]
+    if source_label:
+        lines.append(f"Source wallet: {source_label}.")
+    if description:
+        lines.append(f"Note: {_escape_markdown(description)}")
+    if beneficiary:
+        lines.append(f"Beneficiary tag: {_escape_markdown(beneficiary)}")
+
+    try:
+        unapplied = Decimal(str(repayment.get("unapplied_amount", "0")))
+    except (InvalidOperation, ValueError):
+        unapplied = Decimal("0")
+    if unapplied > Decimal("0"):
+        unapplied_text = _escape_markdown(_format_amount_for_display(unapplied, currency))
+        lines.append(f"Unapplied balance: {unapplied_text} (will remain on the card).")
+
+    statement_summary = None
+    try:
+        statement = await api_client.credit_statement(wallet_record["id"])
+        amount_due = _escape_markdown(
+            _format_amount_for_display(statement.get("amount_due", "0"), currency)
+        )
+        settlement = statement.get("settlement_date", "n/a")
+        statement_summary = f"Current bill: {amount_due} due {settlement}."
+    except Exception:
+        logger.exception("Failed to refresh credit statement after repayment")
+
+    if statement_summary:
+        lines.append(_escape_markdown(statement_summary))
+
+    await message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+    await _load_wallets(context, api_client, user["id"], refresh=True)
+
+
+async def _handle_wallet_investment(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    api_client: FinanceApiClient,
+    user: dict[str, Any],
+    args: list[str],
+) -> None:
+    message = update.message
+    if not message:
+        return
+    if not args:
+        await message.reply_text("Usage: /wallet investment roe <wallet> [start=YYYY-MM-DD] [end=YYYY-MM-DD]")
+        return
+
+    action = args[0].lower()
+    if action != "roe":
+        await message.reply_text("Only the 'roe' action is supported for investment wallets.")
+        return
+
+    if len(args) < 2:
+        await message.reply_text("Please specify which investment wallet to analyse.")
+        return
+
+    wallet_hint = args[1].lstrip("@")
+    try:
+        wallet_record = await _get_wallet_by_name(context, api_client, user["id"], wallet_hint)
+    except ValueError as exc:
+        await message.reply_text(str(exc))
+        return
+
+    if wallet_record.get("type") != "investment":
+        await message.reply_text(
+            f"Wallet '{wallet_record.get('name')}' is not an investment wallet."
+        )
+        return
+
+    options, _ = _partition_option_tokens(args[2:])
+    start_token = options.get("start") or options.get("from")
+    end_token = options.get("end") or options.get("to")
+    start_iso: str | None = None
+    end_iso: str | None = None
+    if start_token:
+        try:
+            start_iso = _parse_iso_date(start_token).isoformat()
+        except ValueError as exc:
+            await message.reply_text(str(exc))
+            return
+    if end_token:
+        try:
+            end_iso = _parse_iso_date(end_token).isoformat()
+        except ValueError as exc:
+            await message.reply_text(str(exc))
+            return
+
+    try:
+        roe = await api_client.investment_roe(
+            wallet_record["id"],
+            start_date=start_iso,
+            end_date=end_iso,
+        )
+    except httpx.HTTPStatusError as exc:
+        await message.reply_text(f"Could not calculate ROE: {exc.response.text}")
+        return
+    except ValueError as exc:
+        await message.reply_text(str(exc))
+        return
+    except Exception:
+        logger.exception("Failed to calculate investment ROE via bot")
+        await message.reply_text("Something went wrong while calculating ROE.")
+        return
+
+    currency = wallet_record.get("currency", "IDR")
+    wallet_name = _escape_markdown(wallet_record.get("name", "wallet"))
+    contributions = _escape_markdown(
+        _format_amount_for_display(roe.get("contributions", "0"), currency)
+    )
+    withdrawals = _escape_markdown(
+        _format_amount_for_display(roe.get("withdrawals", "0"), currency)
+    )
+    net_gain = _escape_markdown(
+        _format_amount_for_display(roe.get("net_gain", "0"), currency)
+    )
+    try:
+        roe_percentage = Decimal(str(roe.get("roe_percentage", "0")))
+    except (InvalidOperation, ValueError):
+        roe_percentage = Decimal("0")
+    roe_text = f"{roe_percentage.quantize(Decimal('0.01'))}%"
+
+    lines = [
+        f"*{wallet_name} investment ROE*",
+        f"Period: {_escape_markdown(str(roe.get('period_start')))} - {_escape_markdown(str(roe.get('period_end')))}",
+        f"Contributions: {contributions}",
+        f"Withdrawals: {withdrawals}",
+        f"Net gain: {net_gain}",
+        f"ROE: {_escape_markdown(roe_text)}",
+    ]
+    try:
+        contrib_value = Decimal(str(roe.get("contributions", "0")))
+    except (InvalidOperation, ValueError):
+        contrib_value = Decimal("0")
+    if contrib_value == 0:
+        lines.append("Note: Contributions are zero for this period, so ROE is shown as 0%.")
+
+    await message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)

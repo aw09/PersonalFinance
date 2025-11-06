@@ -57,6 +57,61 @@ class WalletTransferRequest(BaseModel):
     occurred_at: Optional[date] = None
 
 
+class CreditPurchaseRequest(BaseModel):
+    amount: Decimal
+    description: Optional[str] = Field(default=None, max_length=512)
+    occurred_at: Optional[date] = None
+    installments: int = Field(description="Number of installments (e.g. 3, 6, 12)", ge=1)
+    beneficiary_name: Optional[str] = Field(default=None, max_length=128)
+
+
+class CreditRepaymentRequest(BaseModel):
+    amount: Decimal
+    description: Optional[str] = Field(default=None, max_length=512)
+    occurred_at: Optional[date] = None
+    source_wallet_id: Optional[UUID] = Field(
+        default=None, description="Wallet supplying the cash repayment (defaults to user's main wallet)."
+    )
+    beneficiary_name: Optional[str] = Field(
+        default=None, max_length=128, description="Mark repayment as being for this beneficiary's receivable."
+    )
+
+
+class StatementInstallment(BaseModel):
+    installment_id: UUID
+    installment_number: int
+    due_date: date
+    amount_due: Decimal
+    paid_amount: Decimal
+    wallet_transaction_id: Optional[UUID] = None
+
+
+class CreditStatementResponse(BaseModel):
+    wallet_id: UUID
+    period_start: date
+    period_end: date
+    settlement_date: date
+    amount_due: Decimal
+    minimum_due: Decimal
+    installments: list[StatementInstallment]
+
+
+class CreditRepaymentResponse(BaseModel):
+    wallet: WalletRead
+    source_wallet: Optional[WalletRead] = None
+    unapplied_amount: Decimal
+
+
+class InvestmentRoeResponse(BaseModel):
+    wallet_id: UUID
+    period_start: date
+    period_end: date
+    contributions: Decimal
+    withdrawals: Decimal
+    net_gain: Decimal
+    roe_percentage: Decimal
+
+
 class WalletTransferResponse(BaseModel):
     source_wallet: WalletRead
     target_wallet: WalletRead
