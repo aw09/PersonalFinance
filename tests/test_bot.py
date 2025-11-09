@@ -352,6 +352,32 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
 
         self.assertIn('Transferred 50 K IDR', transfer_text)
         self.assertIn('Investment Fund', transfer_text)
+
+    async def test_wallet_delete_command(self) -> None:
+        message = DummyMessage('/wallet delete Travel confirm=yes')
+        update = SimpleNamespace(
+            message=message,
+            effective_user=SimpleNamespace(id=528101001, full_name='Faris Tester'),
+        )
+
+        api_client = AsyncMock()
+        api_client.ensure_user.return_value = {'id': 'user-1'}
+        api_client.list_wallets.return_value = [
+            {'id': 'w-main', 'name': 'Main Wallet', 'type': 'regular', 'is_default': True},
+            {'id': 'w-travel', 'name': 'Travel', 'type': 'regular', 'is_default': False},
+        ]
+        api_client.delete_wallet = AsyncMock()
+        context = SimpleNamespace(
+            application=SimpleNamespace(bot_data={'api_client': api_client}),
+            args=['delete', 'Travel', 'confirm=yes'],
+            user_data={},
+        )
+
+        await bot.wallet_command(update, context)
+
+        api_client.delete_wallet.assert_awaited_once_with('w-travel')
+        message.reply_text.assert_awaited()
+        self.assertIn('deleted', message.reply_text.await_args.args[0].lower())
     async def test_wallet_command_menu_shows_keyboard(self) -> None:
         message = DummyMessage('/wallet')
         update = SimpleNamespace(

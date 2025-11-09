@@ -116,6 +116,11 @@ class BasicFlowsTester:
             include_edits=True,
         )
 
+        await self.interactor.send_and_expect(
+            f"/wallet delete {renamed_wallet} confirm=yes",
+            "deleted",
+        )
+
         recent_message = await self.interactor.send_and_expect(
             "/recent limit=2 per=1",
             "recent transactions",

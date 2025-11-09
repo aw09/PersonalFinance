@@ -106,6 +106,14 @@ async def update_wallet(session: AsyncSession, wallet: Wallet, payload: WalletUp
     return wallet
 
 
+async def delete_wallet(session: AsyncSession, wallet: Wallet) -> None:
+    user = await session.get(User, wallet.user_id)
+    if user and user.default_wallet_id == wallet.id:
+        raise ValueError("Cannot delete the default wallet.")
+    await session.delete(wallet)
+    await session.commit()
+
+
 async def set_default_wallet(session: AsyncSession, wallet: Wallet) -> Wallet:
     user = await session.get(User, wallet.user_id)
     if not user:

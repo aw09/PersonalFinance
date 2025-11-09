@@ -1860,6 +1860,39 @@ async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text(f"Default wallet set to '{default_wallet['name']}'.")
         return
 
+    if subcommand in {"delete", "del", "remove"}:
+        if len(args) < 2:
+            await update.message.reply_text("Usage: /wallet delete <name> confirm=yes")
+            return
+        target = args[1]
+        options = _parse_wallet_options(args[2:])
+        confirm = options.get("confirm")
+        if not confirm or not _parse_bool_flag(confirm):
+            await update.message.reply_text(
+                "Add confirm=yes to delete a wallet. This action cannot be undone."
+            )
+            return
+        try:
+            wallet_record = await _get_wallet_by_name(context, api_client, user["id"], target)
+        except ValueError as exc:
+            await update.message.reply_text(str(exc))
+            return
+        if wallet_record.get("is_default"):
+            await update.message.reply_text("Cannot delete the default wallet. Set another default first.")
+            return
+        try:
+            await api_client.delete_wallet(wallet_record["id"])
+        except httpx.HTTPStatusError as exc:
+            await update.message.reply_text(f"Could not delete wallet: {exc.response.text}")
+            return
+        except Exception:
+            logger.exception("Failed to delete wallet")
+            await update.message.reply_text("Something went wrong while deleting the wallet.")
+            return
+        await _load_wallets(context, api_client, user["id"], refresh=True)
+        await update.message.reply_text(f"Wallet '{wallet_record['name']}' deleted.")
+        return
+
     usage = (
         "Wallet usage:\n"
         "/wallet add <name> <regular|investment|credit> [currency=IDR] [limit=...] [settlement=day] [default=yes|no]\n"

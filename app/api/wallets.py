@@ -2,7 +2,7 @@ from datetime import date
 from typing import Annotated, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
@@ -25,6 +25,7 @@ from ..services import (
     credit_purchase,
     credit_repayment,
     create_wallet,
+    delete_wallet,
     generate_credit_statement,
     get_user,
     get_wallet,
@@ -115,6 +116,19 @@ async def update_wallet_endpoint(
     wallet = await update_wallet(session, wallet, payload)
     await session.refresh(wallet)
     return await _wallet_response(session, wallet)
+
+
+@router.delete("/{wallet_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_wallet_endpoint(
+    wallet_id: UUID,
+    session: SessionDep,
+) -> Response:
+    wallet = _ensure_wallet(await get_wallet(session, wallet_id))
+    try:
+        await delete_wallet(session, wallet)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/{wallet_id}/deposit", response_model=WalletRead)
