@@ -14,6 +14,7 @@ os.environ.setdefault("AUTO_RUN_MIGRATIONS", "false")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+from app.api.dependencies import get_current_user  # noqa: E402
 from app.db import get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.schemas.transaction import TransactionType  # noqa: E402
@@ -144,11 +145,6 @@ class RoutingTests(unittest.TestCase):
         cls._mark_installment_patch = patch("app.api.debts.mark_installment_paid", new_callable=AsyncMock)
 
         cls._create_user_patch = patch("app.api.users.create_user", new_callable=AsyncMock)
-        cls._list_users_patch = patch("app.api.users.list_users", new_callable=AsyncMock)
-        cls._get_user_patch = patch("app.api.users.get_user", new_callable=AsyncMock)
-        cls._get_user_by_telegram_patch = patch(
-            "app.api.users.get_user_by_telegram_id", new_callable=AsyncMock
-        )
 
         cls._create_wallet_patch = patch("app.api.wallets.create_wallet", new_callable=AsyncMock)
         cls._list_wallets_patch = patch("app.api.wallets.list_wallets", new_callable=AsyncMock)
@@ -158,11 +154,11 @@ class RoutingTests(unittest.TestCase):
         cls._wallet_withdraw_patch = patch("app.api.wallets.wallet_withdraw", new_callable=AsyncMock)
         cls._wallet_adjust_patch = patch("app.api.wallets.wallet_adjust", new_callable=AsyncMock)
         cls._wallet_transfer_patch = patch("app.api.wallets.wallet_transfer", new_callable=AsyncMock)
-        cls._wallet_get_user_patch = patch("app.api.wallets.get_user", new_callable=AsyncMock)
         cls._set_default_wallet_patch = patch("app.api.wallets.set_default_wallet", new_callable=AsyncMock)
 
         cls._receipt_service_patch = patch("app.api.llm.get_receipt_service")
         cls._llm_create_tx_patch = patch("app.api.llm.create_transaction", new_callable=AsyncMock)
+        cls._llm_get_wallet_patch = patch("app.api.llm.get_wallet", new_callable=AsyncMock)
 
         cls._handle_update_patch = patch("app.api.telegram.handle_update", new_callable=AsyncMock)
         cls._telegram_settings_patch = patch(
@@ -186,9 +182,6 @@ class RoutingTests(unittest.TestCase):
         cls.mark_installment_mock = cls._mark_installment_patch.start()
 
         cls.create_user_mock = cls._create_user_patch.start()
-        cls.list_users_mock = cls._list_users_patch.start()
-        cls.get_user_mock = cls._get_user_patch.start()
-        cls.get_user_by_telegram_mock = cls._get_user_by_telegram_patch.start()
 
         cls.create_wallet_mock = cls._create_wallet_patch.start()
         cls.list_wallets_mock = cls._list_wallets_patch.start()
@@ -198,11 +191,11 @@ class RoutingTests(unittest.TestCase):
         cls.wallet_withdraw_mock = cls._wallet_withdraw_patch.start()
         cls.wallet_adjust_mock = cls._wallet_adjust_patch.start()
         cls.wallet_transfer_mock = cls._wallet_transfer_patch.start()
-        cls.wallet_get_user_mock = cls._wallet_get_user_patch.start()
         cls.set_default_wallet_mock = cls._set_default_wallet_patch.start()
 
         cls.get_receipt_service_mock = cls._receipt_service_patch.start()
         cls.llm_create_transaction_mock = cls._llm_create_tx_patch.start()
+        cls.llm_get_wallet_mock = cls._llm_get_wallet_patch.start()
 
         cls.handle_update_mock = cls._handle_update_patch.start()
         cls.telegram_settings_mock = cls._telegram_settings_patch.start()
@@ -218,6 +211,21 @@ class RoutingTests(unittest.TestCase):
 
         app.dependency_overrides[get_db] = _override_db
 
+        cls._current_user_obj = SimpleNamespace(
+            id=uuid4(),
+            telegram_id=123456,
+            full_name="Test User",
+            is_active=True,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+            default_wallet_id=None,
+        )
+
+        async def _override_current_user():
+            return cls._current_user_obj
+
+        app.dependency_overrides[get_current_user] = _override_current_user
+
         cls._client_ctx = TestClient(app)
         cls.client = cls._client_ctx.__enter__()
 
@@ -232,9 +240,6 @@ class RoutingTests(unittest.TestCase):
             cls.get_installment_mock,
             cls.mark_installment_mock,
             cls.create_user_mock,
-            cls.list_users_mock,
-            cls.get_user_mock,
-            cls.get_user_by_telegram_mock,
             cls.create_wallet_mock,
             cls.list_wallets_mock,
             cls.get_wallet_mock,
@@ -243,9 +248,9 @@ class RoutingTests(unittest.TestCase):
             cls.wallet_withdraw_mock,
             cls.wallet_adjust_mock,
             cls.wallet_transfer_mock,
-            cls.wallet_get_user_mock,
             cls.set_default_wallet_mock,
             cls.llm_create_transaction_mock,
+            cls.llm_get_wallet_mock,
             cls.handle_update_mock,
         ]
 
@@ -253,6 +258,7 @@ class RoutingTests(unittest.TestCase):
     def tearDownClass(cls) -> None:
         cls._client_ctx.__exit__(None, None, None)
         app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(get_current_user, None)
 
         patchers = [
             cls._create_tx_patch,
@@ -265,9 +271,6 @@ class RoutingTests(unittest.TestCase):
             cls._get_installment_patch,
             cls._mark_installment_patch,
             cls._create_user_patch,
-            cls._list_users_patch,
-            cls._get_user_patch,
-            cls._get_user_by_telegram_patch,
             cls._create_wallet_patch,
             cls._list_wallets_patch,
             cls._get_wallet_patch,
@@ -276,10 +279,10 @@ class RoutingTests(unittest.TestCase):
             cls._wallet_withdraw_patch,
             cls._wallet_adjust_patch,
             cls._wallet_transfer_patch,
-            cls._wallet_get_user_patch,
             cls._set_default_wallet_patch,
             cls._receipt_service_patch,
             cls._llm_create_tx_patch,
+            cls._llm_get_wallet_patch,
             cls._handle_update_patch,
             cls._telegram_settings_patch,
             cls._init_db_patch,
@@ -300,6 +303,7 @@ class RoutingTests(unittest.TestCase):
         self.llm_transaction = build_transaction_payload(user_id=self.user["id"], source="llm")
         self.debt = build_debt_payload(user_id=self.user["id"])
         self.installment = self.debt["installments"][0]
+        self.installment["debt"] = {"user_id": self.user["id"]}
         self.paid_installment = {
             **self.installment,
             "paid": True,
@@ -317,6 +321,7 @@ class RoutingTests(unittest.TestCase):
                 }
             ],
         }
+        self.paid_installment["debt"] = {"user_id": self.user["id"]}
 
         now = datetime.utcnow()
         self.wallet = {
@@ -345,7 +350,7 @@ class RoutingTests(unittest.TestCase):
             "updated_at": now,
             "is_default": False,
         }
-        self.wallet_get_user_mock.return_value = self.user
+        self.__class__._current_user_obj = SimpleNamespace(**self.user)
 
         self.create_transaction_mock.return_value = self.transaction
         self.list_transactions_mock.return_value = [self.transaction]
@@ -369,6 +374,7 @@ class RoutingTests(unittest.TestCase):
             return None
 
         self.get_wallet_mock.side_effect = _get_wallet_side_effect
+        self.llm_get_wallet_mock.side_effect = _get_wallet_side_effect
         self.wallet_transfer_mock.return_value = (self.wallet, self.investment_wallet)
         self.update_wallet_mock.return_value = self.wallet
         self.wallet_deposit_mock.return_value = None
@@ -377,13 +383,9 @@ class RoutingTests(unittest.TestCase):
         self.wallet_deposit_mock.side_effect = None
         self.wallet_withdraw_mock.side_effect = None
         self.wallet_adjust_mock.side_effect = None
-        self.wallet_get_user_mock.side_effect = None
         self.set_default_wallet_mock.return_value = self.wallet
         self.set_default_wallet_mock.side_effect = None
         self.create_user_mock.return_value = self.user
-        self.list_users_mock.return_value = [self.user]
-        self.get_user_mock.return_value = self.user
-        self.get_user_by_telegram_mock.return_value = self.user
 
         receipt_payload = {
             "transaction": {
@@ -423,7 +425,6 @@ class RoutingTests(unittest.TestCase):
             "category": "Food",
             "occurred_at": "2024-01-01",
             "source": "manual",
-            "user_id": str(self.user["id"]),
         }
         response = self.client.post("/api/transactions", json=payload)
         self.assertEqual(response.status_code, 201)
@@ -459,7 +460,6 @@ class RoutingTests(unittest.TestCase):
             "principal_amount": "1000",
             "total_installments": 10,
             "start_date": "2024-01-01",
-            "user_id": str(self.user["id"]),
         }
         response = self.client.post("/api/debts", json=payload)
         self.assertEqual(response.status_code, 201)
@@ -521,7 +521,6 @@ class RoutingTests(unittest.TestCase):
         files = {"file": ("receipt.jpg", io.BytesIO(b"fake-bytes"), "image/jpeg")}
         data = {
             "commit_transaction": "false",
-            "user_id": str(self.user["id"]),
         }
         response = self.client.post("/api/llm/receipt", data=data, files=files)
         self.assertEqual(response.status_code, 202)
@@ -534,7 +533,6 @@ class RoutingTests(unittest.TestCase):
         files = {"file": ("receipt.jpg", io.BytesIO(b"fake-bytes"), "image/jpeg")}
         data = {
             "commit_transaction": "true",
-            "user_id": str(self.user["id"]),
         }
         response = self.client.post("/api/llm/receipt", data=data, files=files)
         self.assertEqual(response.status_code, 201)
@@ -547,7 +545,6 @@ class RoutingTests(unittest.TestCase):
         files = {"file": ("receipt.jpg", io.BytesIO(b"fake-bytes"), "image/jpeg")}
         data = {
             "commit_transaction": "true",
-            "user_id": str(self.user["id"]),
             "wallet_id": str(self.wallet["id"]),
         }
         response = self.client.post("/api/llm/receipt", data=data, files=files)
@@ -579,19 +576,17 @@ class RoutingTests(unittest.TestCase):
     def test_list_users_route(self) -> None:
         response = self.client.get("/api/users")
         self.assertEqual(response.status_code, 200)
-        self.list_users_mock.assert_awaited_once()
         body = response.json()
         self.assertEqual(len(body), 1)
+        self.assertEqual(body[0]["id"], str(self.user["id"]))
 
     def test_get_user_route(self) -> None:
         user_id = self.user["id"]
         response = self.client.get(f"/api/users/{user_id}")
         self.assertEqual(response.status_code, 200)
-        self.get_user_mock.assert_awaited_once_with(ANY, user_id)
         self.assertEqual(response.json()["id"], str(user_id))
 
     def test_get_user_not_found(self) -> None:
-        self.get_user_mock.return_value = None
         response = self.client.get(f"/api/users/{uuid4()}")
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json()["detail"], "User not found")
@@ -599,14 +594,17 @@ class RoutingTests(unittest.TestCase):
     def test_get_user_by_telegram_route(self) -> None:
         response = self.client.get("/api/users/by-telegram/123456")
         self.assertEqual(response.status_code, 200)
-        self.get_user_by_telegram_mock.assert_awaited_once_with(ANY, 123456)
         self.assertEqual(response.json()["telegram_id"], self.user["telegram_id"])
 
     def test_get_user_by_telegram_not_found(self) -> None:
-        self.get_user_by_telegram_mock.return_value = None
         response = self.client.get("/api/users/by-telegram/999999")
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json()["detail"], "User not found")
+
+    def test_get_user_me_route(self) -> None:
+        response = self.client.get("/api/users/me")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["id"], str(self.user["id"]))
 
     def test_list_wallets_route(self) -> None:
         response = self.client.get(f"/api/wallets?user_id={self.user['id']}")
@@ -627,7 +625,6 @@ class RoutingTests(unittest.TestCase):
         }
         self.create_wallet_mock.return_value = new_wallet
         payload = {
-            "user_id": str(self.user["id"]),
             "name": "Savings",
             "type": "regular",
             "currency": "IDR",
@@ -649,17 +646,13 @@ class RoutingTests(unittest.TestCase):
             "is_default": True,
         }
         self.create_wallet_mock.return_value = new_wallet
-        self.wallet_get_user_mock.return_value = {
-            **self.user,
-            "default_wallet_id": new_wallet_id,
-        }
         payload = {
-            "user_id": str(self.user["id"]),
             "name": "Savings",
             "type": "regular",
             "currency": "IDR",
             "make_default": True,
         }
+        self.__class__._current_user_obj.default_wallet_id = new_wallet_id
         response = self.client.post("/api/wallets", json=payload)
         self.assertEqual(response.status_code, 201)
         self.create_wallet_mock.assert_awaited_once()
@@ -753,10 +746,7 @@ class RoutingTests(unittest.TestCase):
         }
         self.get_wallet_mock.side_effect = lambda *_args, **_kwargs: new_wallet
         self.set_default_wallet_mock.return_value = new_wallet
-        self.wallet_get_user_mock.return_value = {
-            **self.user,
-            "default_wallet_id": new_wallet["id"],
-        }
+        self.__class__._current_user_obj.default_wallet_id = new_wallet["id"]
         response = self.client.post(f"/api/wallets/{new_wallet['id']}/set-default")
         self.assertEqual(response.status_code, 200)
         self.set_default_wallet_mock.assert_awaited_once()

@@ -1,5 +1,7 @@
+from .auth import AccessTokenResponse, TelegramLoginRequest
 from .debt import (
     DebtCreate,
+    DebtCreateRequest,
     DebtInstallmentPaymentRead,
     DebtInstallmentRead,
     DebtRead,
@@ -8,12 +10,14 @@ from .debt import (
 )
 from .transaction import (
     TransactionCreate,
+    TransactionCreateRequest,
     TransactionItem,
     TransactionRead,
     TransactionType,
 )
 from .wallet import (
     WalletCreate,
+    WalletCreateRequest,
     WalletRead,
     WalletTransactionRequest,
     WalletTransferRequest,
@@ -28,11 +32,15 @@ from .wallet import (
 from .user import UserCreate, UserRead
 
 __all__ = [
+    "AccessTokenResponse",
+    "TelegramLoginRequest",
     "TransactionCreate",
+    "TransactionCreateRequest",
     "TransactionRead",
     "TransactionType",
     "TransactionItem",
     "DebtCreate",
+    "DebtCreateRequest",
     "DebtRead",
     "DebtUpdate",
     "DebtInstallmentRead",
@@ -41,6 +49,7 @@ __all__ = [
     "UserCreate",
     "UserRead",
     "WalletCreate",
+    "WalletCreateRequest",
     "WalletRead",
     "WalletUpdate",
     "WalletTransactionRequest",

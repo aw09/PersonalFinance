@@ -1,4 +1,5 @@
-from typing import Annotated, Any, Mapping, Optional
+from collections.abc import Mapping
+from typing import Annotated, Any, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -7,19 +8,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_db
 from ..schemas.debt import (
     DebtCreate,
+    DebtCreateRequest,
+    DebtInstallmentRead,
     DebtRead,
     DebtUpdate,
-    DebtInstallmentRead,
     InstallmentPaymentRequest,
 )
 from ..services import (
     create_debt,
     get_debt,
     get_installment,
+    get_wallet,
     list_debts,
     mark_installment_paid,
     update_debt,
 )
+from .dependencies import CurrentUser
 
 router = APIRouter()
 
@@ -38,32 +42,57 @@ def _debt_to_read(debt: Any) -> DebtRead:
     return DebtRead.model_validate(debt)
 
 
+def _get_user_id(record: Any) -> Any:
+    if record is None:
+        return None
+    if isinstance(record, Mapping):
+        return record.get("user_id")
+    return getattr(record, "user_id", None)
+
+
 @router.post("", response_model=DebtRead, status_code=status.HTTP_201_CREATED)
-async def create_debt_endpoint(payload: DebtCreate, session: SessionDep) -> DebtRead:
-    debt = await create_debt(session, payload)
+async def create_debt_endpoint(
+    payload: DebtCreateRequest,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> DebtRead:
+    if payload.wallet_id:
+        wallet = await get_wallet(session, payload.wallet_id)
+        if not wallet or _get_user_id(wallet) != current_user.id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Wallet not found")
+
+    debt_payload = DebtCreate(user_id=current_user.id, **payload.model_dump())
+    debt = await create_debt(session, debt_payload)
     return _debt_to_read(debt)
 
 
 @router.get("", response_model=list[DebtRead])
 async def list_debts_endpoint(
-    session: SessionDep, user_id: Optional[UUID] = Query(default=None)
+    session: SessionDep, current_user: CurrentUser
 ) -> list[DebtRead]:
-    debts = await list_debts(session, user_id=user_id)
+    debts = await list_debts(session, user_id=current_user.id)
     return [_debt_to_read(d) for d in debts]
 
 
 @router.get("/{debt_id}", response_model=DebtRead)
-async def get_debt_endpoint(debt_id: UUID, session: SessionDep) -> DebtRead:
+async def get_debt_endpoint(
+    debt_id: UUID, session: SessionDep, current_user: CurrentUser
+) -> DebtRead:
     debt = await get_debt(session, debt_id)
-    if not debt:
+    if not debt or _get_user_id(debt) != current_user.id:
         raise HTTPException(status_code=404, detail="Debt not found")
     return _debt_to_read(debt)
 
 
 @router.patch("/{debt_id}", response_model=DebtRead)
-async def update_debt_endpoint(debt_id: UUID, payload: DebtUpdate, session: SessionDep) -> DebtRead:
+async def update_debt_endpoint(
+    debt_id: UUID,
+    payload: DebtUpdate,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> DebtRead:
     debt = await get_debt(session, debt_id)
-    if not debt:
+    if not debt or _get_user_id(debt) != current_user.id:
         raise HTTPException(status_code=404, detail="Debt not found")
     debt = await update_debt(session, debt, payload)
     return _debt_to_read(debt)
@@ -74,9 +103,19 @@ async def mark_installment_paid_endpoint(
     installment_id: UUID,
     payload: InstallmentPaymentRequest,
     session: SessionDep,
+    current_user: CurrentUser,
 ) -> DebtInstallmentRead:
     installment = await get_installment(session, installment_id)
     if not installment:
+        raise HTTPException(status_code=404, detail="Installment not found")
+    await session.refresh(installment, attribute_names=["debt"])
+    debt_ref = None
+    if isinstance(installment, Mapping):
+        debt_ref = installment.get("debt")
+    else:
+        debt_ref = getattr(installment, "debt", None)
+    debt_user_id = _get_user_id(debt_ref)
+    if debt_user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Installment not found")
     try:
         installment = await mark_installment_paid(session, installment, payload)

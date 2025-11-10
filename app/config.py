@@ -42,6 +42,29 @@ class Settings(BaseSettings):
         default=False, alias="TELEGRAM_REGISTER_WEBHOOK_ON_START"
     )
     auto_run_migrations: bool = Field(default=False, alias="AUTO_RUN_MIGRATIONS")
+    auth_secret_key: str = Field(
+        default="change-me-to-a-safe-key",
+        alias="AUTH_SECRET_KEY",
+        description="Secret key used to sign API access tokens.",
+        min_length=16,
+    )
+    auth_token_algorithm: str = Field(
+        default="HS256",
+        alias="AUTH_TOKEN_ALGORITHM",
+        description="JWT signing algorithm used for access tokens.",
+    )
+    auth_access_token_ttl_seconds: int = Field(
+        default=60 * 60 * 12,
+        alias="AUTH_ACCESS_TOKEN_TTL_SECONDS",
+        description="Lifetime of access tokens issued after Telegram login (in seconds).",
+        ge=300,
+    )
+    telegram_login_max_age_seconds: int = Field(
+        default=60 * 60 * 24,
+        alias="TELEGRAM_LOGIN_MAX_AGE_SECONDS",
+        description="Maximum age of the Telegram login payload (in seconds).",
+        ge=60,
+    )
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

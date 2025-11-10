@@ -49,12 +49,47 @@ app/
 
    When `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, and `BACKEND_BASE_URL` are set, the bot registers a webhook automatically and begins processing updates through the FastAPI endpoint.
 
+## Authentication
+
+Every REST endpoint under `/api` (except `/api/auth/login` and the Telegram webhook receiver) requires a bearer token that is issued after a successful Telegram Login Widget handshake.
+
+1. Render Telegram's [Login Widget](https://core.telegram.org/widgets/login) on the frontend and capture the payload sent to your callback (fields such as `id`, `first_name`, `auth_date`, and `hash`).
+2. Forward the payload to the backend:
+
+   ```bash
+   curl -X POST http://localhost:8000/api/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{
+       "id": 123456,
+       "first_name": "Ada",
+       "username": "ada_lovelace",
+       "auth_date": 1735660800,
+       "hash": "<telegram-signed-hash>"
+     }'
+   ```
+
+   The server verifies the signature using your `TELEGRAM_BOT_TOKEN`, provisions/updates the user, and returns:
+
+   ```json
+   {
+     "access_token": "eyJhbGciOiJI...",
+     "token_type": "bearer",
+     "expires_in": 43200,
+     "expires_at": "2024-12-01T12:00:00Z",
+     "user": { ... }
+   }
+   ```
+
+3. Attach the token to subsequent requests via `Authorization: Bearer <access_token>`.
+
+Tokens expire after `AUTH_ACCESS_TOKEN_TTL_SECONDS` (12 hours by default). Repeat the Telegram login flow to obtain a fresh token when needed.
+
 ## Wallets
 
 Every user starts with a “Main Wallet” (type `regular`) that acts as their default balance bucket. Additional wallets can be created to separate investment funds or credit accounts:
 
-- `POST /api/wallets` with `{"user_id": "...", "name": "...", "type": "regular|investment|credit", "make_default": false}`
-- `GET /api/wallets?user_id=...` to see balances and which wallet is currently marked as default
+- `POST /api/wallets` with `{"name": "...", "type": "regular|investment|credit", "make_default": false}`
+- `GET /api/wallets` to see balances and which wallet is currently marked as default
 - `POST /api/wallets/{wallet_id}/deposit|withdraw|adjust` to move money in or out (each call creates a linked transaction)
 - `POST /api/wallets/transfer` to move money between two wallets (uses separate transactions for each side).
 - `POST /api/wallets/{wallet_id}/set-default` to change the default wallet for future transactions
@@ -159,6 +194,5 @@ Extend `integration_tests/telegram_bot/` with additional flows as required (e.g.
 
 ## Next steps
 
-- Wire up authentication if you need multi-user support.
 - Expand Telegram flows (e.g., inline keyboards for marking installments as paid).
 - Add reporting endpoints (monthly summaries, category breakdowns, etc.).
