@@ -116,7 +116,9 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
 
         await bot.add(update, context)
 
-        api_client.ensure_user.assert_awaited_once_with(528101001, "Faris Tester")
+        api_client.ensure_user.assert_awaited_once()
+        ensure_args = api_client.ensure_user.await_args.args
+        self.assertEqual(getattr(ensure_args[0], "id", None), 528101001)
         api_client.create_transaction.assert_awaited_once()
 
         payload = api_client.create_transaction.await_args.args[0]
@@ -229,7 +231,9 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
 
         await bot.receipt_photo(update, context)
 
-        api_client.ensure_user.assert_awaited_once_with(528101001, "Faris Tester")
+        api_client.ensure_user.assert_awaited_once()
+        ensure_args = api_client.ensure_user.await_args.args
+        self.assertEqual(getattr(ensure_args[0], "id", None), 528101001)
         api_client.parse_receipt.assert_awaited_once()
         args, kwargs = api_client.parse_receipt.await_args
         self.assertEqual(args[0], photo_data)
@@ -347,6 +351,7 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
         self.assertEqual(payload['amount'], '50000.00')
         self.assertEqual(payload['source_wallet_id'], 'w-main')
         self.assertEqual(payload['target_wallet_id'], 'w-invest')
+        self.assertEqual(payload['user_id'], 'user-1')
         message.reply_text.assert_awaited_once()
         transfer_text = message.reply_text.await_args.args[0]
 
@@ -375,7 +380,7 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
 
         await bot.wallet_command(update, context)
 
-        api_client.delete_wallet.assert_awaited_once_with('w-travel')
+        api_client.delete_wallet.assert_awaited_once_with('w-travel', user_id='user-1')
         message.reply_text.assert_awaited()
         self.assertIn('deleted', message.reply_text.await_args.args[0].lower())
     async def test_wallet_command_menu_shows_keyboard(self) -> None:
@@ -530,6 +535,7 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
         payload = api_client.credit_purchase.await_args.args[1]
         self.assertEqual(payload['amount'], '150000.00')
         self.assertEqual(payload['installments'], 3)
+        self.assertEqual(payload['user_id'], 'user-1')
         message.reply_text.assert_awaited_once()
         reply_text = '\n'.join(message.reply_text.await_args.args)
         self.assertIn('credit purchase', reply_text.lower())
@@ -585,6 +591,7 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
         repay_payload = api_client.credit_repayment.await_args.args[1]
         self.assertEqual(repay_payload['amount'], '200000.00')
         self.assertEqual(repay_payload['source_wallet_id'], 'w-main')
+        self.assertEqual(repay_payload['user_id'], 'user-1')
         message.reply_text.assert_awaited_once()
         reply_text = '\n'.join(message.reply_text.await_args.args)
         self.assertIn('applied repayment', reply_text.lower())
@@ -625,6 +632,9 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
         await bot.wallet_command(update, context)
 
         api_client.investment_roe.assert_awaited_once()
+        roe_args = api_client.investment_roe.await_args.args
+        self.assertEqual(roe_args[0], 'user-1')
+        self.assertEqual(roe_args[1], 'w-invest')
         message.reply_text.assert_awaited_once()
         reply_text = '\n'.join(message.reply_text.await_args.args)
         self.assertIn('investment roe', reply_text.lower())

@@ -6,7 +6,6 @@ import contextlib
 import logging
 import re
 import textwrap
-import textwrap
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -40,6 +39,7 @@ except ImportError:  # pragma: no cover - fallback for Python < 3.9 in tests
 
 from ..config import get_settings
 from ..models.transaction import TransactionType
+from .api_client import FinanceApiClient
 
 logger = logging.getLogger(__name__)
 
@@ -456,7 +456,7 @@ async def _prefetch_credit_statements(
         if not wallet_id:
             continue
         try:
-            statement = await api_client.credit_statement(wallet_id)
+            statement = await api_client.credit_statement(user_id, wallet_id)
         except httpx.HTTPStatusError as exc:
             logger.exception(
                 "Failed to fetch credit statement (HTTP error) for wallet %s: %s",
@@ -657,189 +657,6 @@ def _parse_bool_flag(value: str) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
-class FinanceApiClient:
-    """HTTP client that forwards Telegram entries to the FastAPI backend."""
-
-    def __init__(self, api_base_url: str) -> None:
-        self.client = httpx.AsyncClient(
-            base_url=api_base_url,
-            timeout=httpx.Timeout(timeout=60.0, connect=10.0),
-        )
-
-    async def ensure_user(self, telegram_id: int, full_name: str | None) -> dict[str, Any]:
-        response = await self.client.get(f"/api/users/by-telegram/{telegram_id}")
-        if response.status_code == 404:
-            response = await self.client.post(
-                "/api/users",
-                json={"telegram_id": telegram_id, "full_name": full_name},
-            )
-        response.raise_for_status()
-        return response.json()
-
-    async def create_transaction(self, payload: dict[str, Any]) -> dict[str, Any]:
-        response = await self.client.post("/api/transactions", json=payload)
-        response.raise_for_status()
-        return response.json()
-
-    async def parse_receipt(
-        self,
-        image_bytes: bytes,
-        *,
-        user_id: str,
-        commit_transaction: bool = True,
-        wallet_id: str | None = None,
-    ) -> dict[str, Any]:
-        files = {"file": ("receipt.jpg", image_bytes, "image/jpeg")}
-        data = {
-            "user_id": user_id,
-            "commit_transaction": "true" if commit_transaction else "false",
-        }
-        if wallet_id:
-            data["wallet_id"] = wallet_id
-        response = await self.client.post("/api/llm/receipt", data=data, files=files)
-        response.raise_for_status()
-        return response.json()
-
-    async def list_transactions(
-        self,
-        *,
-        user_id: str,
-        limit: int = 500,
-        offset: int = 0,
-        wallet_id: str | None = None,
-        occurred_after: str | None = None,
-        occurred_before: str | None = None,
-    ) -> list[dict[str, Any]]:
-        params: dict[str, Any] = {
-            "user_id": user_id,
-            "limit": min(limit, 200),
-            "offset": max(offset, 0),
-        }
-        if wallet_id:
-            params["wallet_id"] = wallet_id
-        if occurred_after:
-            params["occurred_after"] = occurred_after
-        if occurred_before:
-            params["occurred_before"] = occurred_before
-        response = await self.client.get("/api/transactions", params=params)
-        response.raise_for_status()
-        return response.json()
-
-    async def list_wallets(self, *, user_id: str) -> list[dict[str, Any]]:
-        response = await self.client.get("/api/wallets", params={"user_id": user_id})
-        response.raise_for_status()
-        return response.json()
-
-    async def create_wallet(self, payload: dict[str, Any]) -> dict[str, Any]:
-        response = await self.client.post("/api/wallets", json=payload)
-        response.raise_for_status()
-        return response.json()
-
-    async def update_wallet(self, wallet_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        response = await self.client.patch(f"/api/wallets/{wallet_id}", json=payload)
-        response.raise_for_status()
-        return response.json()
-
-    async def set_default_wallet(self, wallet_id: str) -> dict[str, Any]:
-        response = await self.client.post(f"/api/wallets/{wallet_id}/set-default")
-        response.raise_for_status()
-        return response.json()
-
-    async def transfer_wallets(self, payload: dict[str, Any]) -> dict[str, Any]:
-        response = await self.client.post("/api/wallets/transfer", json=payload)
-        response.raise_for_status()
-        return response.json()
-
-    async def credit_purchase(self, wallet_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        response = await self.client.post(f"/api/wallets/{wallet_id}/credit/purchase", json=payload)
-        response.raise_for_status()
-        return response.json()
-
-    async def credit_repayment(self, wallet_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        response = await self.client.post(f"/api/wallets/{wallet_id}/credit/repay", json=payload)
-        response.raise_for_status()
-        return response.json()
-
-    async def credit_statement(
-        self,
-        wallet_id: str,
-        *,
-        reference_date: str | None = None,
-    ) -> dict[str, Any]:
-        params: dict[str, Any] = {}
-        if reference_date:
-            params["reference_date"] = reference_date
-        response = await self.client.get(
-            f"/api/wallets/{wallet_id}/credit/statement",
-            params=params or None,
-        )
-        response.raise_for_status()
-        return response.json()
-
-    async def investment_roe(
-        self,
-        wallet_id: str,
-        *,
-        start_date: str | None = None,
-        end_date: str | None = None,
-    ) -> dict[str, Any]:
-        params: dict[str, Any] = {}
-        if start_date:
-            params["start_date"] = start_date
-        if end_date:
-            params["end_date"] = end_date
-        response = await self.client.get(
-            f"/api/wallets/{wallet_id}/investment/roe",
-            params=params or None,
-        )
-        response.raise_for_status()
-        return response.json()
-
-    async def create_debt(self, payload: dict[str, Any]) -> dict[str, Any]:
-        response = await self.client.post("/api/debts", json=payload)
-        response.raise_for_status()
-        return response.json()
-
-    async def list_debts(self, *, user_id: str) -> list[dict[str, Any]]:
-        response = await self.client.get("/api/debts", params={"user_id": user_id})
-        response.raise_for_status()
-        return response.json()
-
-    async def apply_installment_payment(
-        self,
-        installment_id: str,
-        *,
-        amount: Decimal,
-        paid_at: date,
-        transaction_id: str | None = None,
-    ) -> dict[str, Any]:
-        payload: dict[str, Any] = {
-            "paid_at": paid_at.isoformat(),
-            "amount": str(amount),
-        }
-        if transaction_id:
-            payload["transaction_id"] = transaction_id
-        response = await self.client.post(
-            f"/api/debts/installments/{installment_id}/pay",
-            json=payload,
-        )
-        response.raise_for_status()
-        return response.json()
-
-    async def update_debt_status(self, debt_id: str, *, status: str) -> dict[str, Any]:
-        response = await self.client.patch(f"/api/debts/{debt_id}", json={"status": status})
-        response.raise_for_status()
-        return response.json()
-
-    async def aclose(self) -> None:
-        await self.client.aclose()
-
-
-_application: Application | None = None
-_api_client: FinanceApiClient | None = None
-_lock = asyncio.Lock()
-
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "Hi! Send `/add <type> <amount> <description>` to store a transaction.\n"
@@ -979,7 +796,7 @@ async def lend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("Could not determine your Telegram user.")
         return
     try:
-        user = await api_client.ensure_user(tele_user.id, tele_user.full_name)
+        user = await api_client.ensure_user(tele_user)
     except httpx.HTTPStatusError as exc:
         logger.exception("Failed to ensure Telegram user in backend")
         await update.message.reply_text(f"User sync error: {exc.response.text}")
@@ -1084,7 +901,7 @@ async def repay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     try:
-        user = await api_client.ensure_user(tele_user.id, tele_user.full_name)
+        user = await api_client.ensure_user(tele_user)
     except httpx.HTTPStatusError as exc:
         logger.exception("Failed to ensure Telegram user in backend")
         await update.message.reply_text(f"User sync error: {exc.response.text}")
@@ -1159,6 +976,7 @@ async def repay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 break
             try:
                 updated = await api_client.apply_installment_payment(
+                    user["id"],
                     inst["id"],
                     amount=chunk,
                     paid_at=_local_today(),
@@ -1185,7 +1003,9 @@ async def repay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         debt_outstanding = _debt_outstanding_amount(debt)
         if debt_outstanding <= Decimal("0"):
             try:
-                await api_client.update_debt_status(debt["id"], status="settled")
+                await api_client.update_debt_status(
+                    user["id"], debt["id"], status="settled"
+                )
             except Exception:
                 logger.exception("Failed to update debt status to settled.")
         if remaining <= Decimal("0"):
@@ -1227,7 +1047,7 @@ async def owed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("Could not determine your Telegram user.")
         return
     try:
-        user = await api_client.ensure_user(tele_user.id, tele_user.full_name)
+        user = await api_client.ensure_user(tele_user)
     except httpx.HTTPStatusError as exc:
         logger.exception("Failed to ensure Telegram user in backend")
         await update.message.reply_text(f"User sync error: {exc.response.text}")
@@ -1293,7 +1113,7 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     api_client: "FinanceApiClient" = context.application.bot_data["api_client"]
     try:
-        user = await api_client.ensure_user(tele_user.id, tele_user.full_name)
+        user = await api_client.ensure_user(tele_user)
     except httpx.HTTPStatusError as exc:
         logger.exception("Failed to ensure Telegram user in backend")
         await update.message.reply_text(f"User sync error: {exc.response.text}")
@@ -1405,8 +1225,11 @@ async def wallet_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await query.answer()
     api_client: "FinanceApiClient" = context.application.bot_data["api_client"]
     tele_user = query.from_user
+    if tele_user is None:
+        await query.edit_message_text("Could not determine your Telegram user.")
+        return
     try:
-        user = await api_client.ensure_user(tele_user.id, tele_user.full_name if tele_user else None)
+        user = await api_client.ensure_user(tele_user)
     except httpx.HTTPStatusError as exc:
         logger.exception("Failed to ensure Telegram user in backend during wallet callback")
         await query.edit_message_text(f"User sync error: {exc.response.text}")
@@ -1560,7 +1383,7 @@ async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("Could not determine your Telegram user.")
         return
     try:
-        user = await api_client.ensure_user(tele_user.id, tele_user.full_name)
+        user = await api_client.ensure_user(tele_user)
     except httpx.HTTPStatusError as exc:
         logger.exception("Failed to ensure Telegram user in backend")
         await update.message.reply_text(f"User sync error: {exc.response.text}")
@@ -1719,6 +1542,7 @@ async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await update.message.reply_text("No changes detected.")
             return
 
+        update_payload["user_id"] = user["id"]
         try:
             wallet = await api_client.update_wallet(wallet_record["id"], update_payload)
         except httpx.HTTPStatusError as exc:
@@ -1732,7 +1556,9 @@ async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if "default" in options:
             try:
                 if _parse_bool_flag(options["default"]):
-                    await api_client.set_default_wallet(wallet_record["id"])
+                    await api_client.set_default_wallet(
+                        wallet_record["id"], user_id=user["id"]
+                    )
             except Exception:
                 logger.exception("Failed to update default wallet during edit.")
 
@@ -1799,6 +1625,7 @@ async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         }
         if note:
             transfer_payload["description"] = note
+        transfer_payload["user_id"] = user["id"]
         try:
             result = await api_client.transfer_wallets(transfer_payload)
         except httpx.HTTPStatusError as exc:
@@ -1847,7 +1674,9 @@ async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await update.message.reply_text(str(exc))
             return
         try:
-            await api_client.set_default_wallet(wallet_record["id"])
+            await api_client.set_default_wallet(
+                wallet_record["id"], user_id=user["id"]
+            )
         except httpx.HTTPStatusError as exc:
             await update.message.reply_text(f"Could not set default wallet: {exc.response.text}")
             return
@@ -1881,7 +1710,7 @@ async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await update.message.reply_text("Cannot delete the default wallet. Set another default first.")
             return
         try:
-            await api_client.delete_wallet(wallet_record["id"])
+            await api_client.delete_wallet(wallet_record["id"], user_id=user["id"])
         except httpx.HTTPStatusError as exc:
             await update.message.reply_text(f"Could not delete wallet: {exc.response.text}")
             return
@@ -1915,7 +1744,7 @@ async def recent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("Could not determine your Telegram user.")
         return
     try:
-        user = await api_client.ensure_user(tele_user.id, tele_user.full_name)
+        user = await api_client.ensure_user(tele_user)
     except httpx.HTTPStatusError as exc:
         logger.exception("Failed to ensure Telegram user in backend")
         await update.message.reply_text(f"User sync error: {exc.response.text}")
@@ -2041,7 +1870,7 @@ async def receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     api_client: "FinanceApiClient" = context.application.bot_data["api_client"]
     try:
-        user = await api_client.ensure_user(tele_user.id, tele_user.full_name)
+        user = await api_client.ensure_user(tele_user)
     except httpx.HTTPStatusError as exc:
         logger.exception("Failed to ensure Telegram user in backend")
         await status_message.edit_text(f"User sync error: {exc.response.text}")
@@ -2154,7 +1983,7 @@ async def _create_transaction(
         return
 
     try:
-        user = await api_client.ensure_user(tele_user.id, tele_user.full_name)
+        user = await api_client.ensure_user(tele_user)
     except httpx.HTTPStatusError as exc:
         logger.exception("Failed to ensure Telegram user in backend")
         await update.message.reply_text(f"User sync error: {exc.response.text}")
@@ -2256,7 +2085,7 @@ async def init_bot() -> None:
         if _application is not None:
             return
 
-        api_client = FinanceApiClient(api_base_url)
+        api_client = FinanceApiClient(api_base_url, bot_token=settings.telegram_bot_token)
         application = _create_application(settings.telegram_bot_token, api_client)
 
         try:
@@ -2733,6 +2562,7 @@ async def _handle_wallet_credit(
                 return
         try:
             statement = await api_client.credit_statement(
+                user["id"],
                 wallet_record["id"],
                 reference_date=reference_value,
             )
@@ -2799,6 +2629,7 @@ async def _handle_wallet_credit(
         if beneficiary:
             payload["beneficiary_name"] = beneficiary
 
+        payload["user_id"] = user["id"]
         try:
             debt = await api_client.credit_purchase(wallet_record["id"], payload)
         except httpx.HTTPStatusError as exc:
@@ -2960,6 +2791,7 @@ async def _execute_credit_repay(
     if source_wallet_record:
         payload["source_wallet_id"] = source_wallet_record.get("id")
 
+    payload["user_id"] = user["id"]
     try:
         repayment = await api_client.credit_repayment(wallet_record["id"], payload)
     except httpx.HTTPStatusError as exc:
@@ -2998,7 +2830,7 @@ async def _execute_credit_repay(
 
     statement_summary = None
     try:
-        statement = await api_client.credit_statement(wallet_record["id"])
+        statement = await api_client.credit_statement(user["id"], wallet_record["id"])
         amount_due = _escape_markdown(
             _format_amount_for_display(statement.get("amount_due", "0"), currency)
         )
@@ -3603,6 +3435,7 @@ async def _handle_wallet_investment(
 
     try:
         roe = await api_client.investment_roe(
+            user["id"],
             wallet_record["id"],
             start_date=start_iso,
             end_date=end_iso,
