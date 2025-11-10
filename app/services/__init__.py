@@ -1,3 +1,4 @@
+from .auth import authenticate_telegram_user
 from .debts import (
     create_debt,
     get_debt,
@@ -31,6 +32,7 @@ from .wallets import (
 )
 
 __all__ = [
+    "authenticate_telegram_user",
     "create_transaction",
     "get_transaction",
     "list_transactions",

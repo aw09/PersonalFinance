@@ -3,11 +3,23 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
+from datetime import date, datetime
+from decimal import Decimal
+from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..models.wallet import WalletType
+
+
+class WalletCreateRequest(BaseModel):
+    name: str = Field(max_length=64)
+    type: WalletType = Field(default=WalletType.REGULAR)
+    currency: str = Field(default="IDR", max_length=3, min_length=3)
+    credit_limit: Optional[Decimal] = Field(default=None, ge=0)
+    settlement_day: Optional[int] = Field(default=None, ge=1, le=31)
+    make_default: bool = Field(default=False)
 
 
 class WalletCreate(BaseModel):

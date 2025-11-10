@@ -20,8 +20,23 @@ class TransactionItem(BaseModel):
     category: Optional[str] = None
 
 
+class TransactionCreateRequest(BaseModel):
+    """External API payload for adding a transaction."""
+
+    type: TransactionType
+    amount: Decimal
+    currency: str = Field(default="IDR", min_length=3, max_length=3)
+    description: Optional[str] = Field(default=None, max_length=512)
+    category: Optional[str] = Field(default=None, max_length=64)
+    occurred_at: date
+    items: Optional[list[TransactionItem]] = None
+    metadata: Optional[dict[str, Any]] = None
+    source: str = Field(default="manual", max_length=32)
+    wallet_id: Optional[UUID] = None
+
+
 class TransactionCreate(BaseModel):
-    """Payload for adding a new transaction."""
+    """Internal payload for persisting a new transaction."""
 
     type: TransactionType
     amount: Decimal

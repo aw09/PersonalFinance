@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -62,8 +63,23 @@ class DebtRead(BaseModel):
     installments: list[DebtInstallmentRead]
 
 
+class DebtCreateRequest(BaseModel):
+    """External payload for creating a debt."""
+
+    name: str = Field(max_length=128)
+    description: Optional[str] = Field(default=None, max_length=512)
+    principal_amount: Decimal
+    total_installments: int = Field(gt=0, le=240)
+    start_date: date
+    interest_rate: Optional[Decimal] = Field(default=None)
+    frequency_months: int = Field(default=1, gt=0, le=12)
+    category: str = Field(default="manual", max_length=32)
+    wallet_id: Optional[UUID] = None
+    beneficiary_name: Optional[str] = Field(default=None, max_length=128)
+
+
 class DebtCreate(BaseModel):
-    """Payload for creating a debt."""
+    """Internal payload for creating a debt."""
 
     name: str = Field(max_length=128)
     description: Optional[str] = Field(default=None, max_length=512)

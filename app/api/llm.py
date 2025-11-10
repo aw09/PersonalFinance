@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+from collections.abc import Mapping
 from typing import Annotated
 from uuid import UUID
 
@@ -9,8 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
 from ..schemas.transaction import TransactionCreate, TransactionItem, TransactionRead, TransactionType
-from ..services import create_transaction, get_receipt_service
+from ..services import create_transaction, get_receipt_service, get_wallet
 from ..services.llm import ReceiptExtractionError
+from .dependencies import CurrentUser
 
 router = APIRouter()
 
@@ -60,9 +62,9 @@ def _parse_transaction_payload(payload: dict, *, user_id: UUID) -> TransactionCr
 @router.post("/receipt", response_model=TransactionRead, status_code=status.HTTP_201_CREATED)
 async def parse_receipt_endpoint(
     session: SessionDep,
+    current_user: CurrentUser,
     file: UploadFile = File(...),
     commit_transaction: bool = Form(default=True),
-    user_id: UUID = Form(...),
     wallet_id: UUID | None = Form(default=None),
 ) -> TransactionRead | JSONResponse:
     if not file.content_type or not file.content_type.startswith("image/"):
@@ -72,8 +74,15 @@ async def parse_receipt_endpoint(
     service = get_receipt_service()
     try:
         payload = await service.parse_receipt(image_bytes)
-        transaction_payload = _parse_transaction_payload(payload, user_id=user_id)
+        transaction_payload = _parse_transaction_payload(payload, user_id=current_user.id)
         if wallet_id:
+            wallet = await get_wallet(session, wallet_id)
+            if isinstance(wallet, Mapping):
+                wallet_owner = wallet.get("user_id")
+            else:
+                wallet_owner = getattr(wallet, "user_id", None)
+            if not wallet or wallet_owner != current_user.id:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Wallet not found")
             transaction_payload = transaction_payload.model_copy(update={"wallet_id": wallet_id})
     except ReceiptExtractionError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
