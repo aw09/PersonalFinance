@@ -31,6 +31,24 @@ cmds = [
     [sys.executable, "integration_tests/telegram_bot/repay_flow.py"],
 ]
 
+results = []
+
 for cmd in cmds:
-    print(f"Running {' '.join(cmd)}")
-    subprocess.check_call(cmd)
+    display = " ".join(cmd)
+    print(f"Running {display}")
+    try:
+        subprocess.check_call(cmd)
+        results.append((display, 0, None))
+    except subprocess.CalledProcessError as exc:
+        # Record the failure but keep the remaining tests running.
+        print(f"[ERROR] {display} exited with code {exc.returncode}")
+        results.append((display, exc.returncode, exc))
+
+failed = [result for result in results if result[1] != 0]
+
+if failed:
+    print("\nIntegration test summary:")
+    for display, returncode, _exc in results:
+        status = "OK" if returncode == 0 else f"FAIL ({returncode})"
+        print(f" - {display}: {status}")
+    raise SystemExit(1)

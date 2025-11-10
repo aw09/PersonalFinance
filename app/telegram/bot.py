@@ -740,6 +740,10 @@ class FinanceApiClient:
         response.raise_for_status()
         return response.json()
 
+    async def delete_wallet(self, wallet_id: str) -> None:
+        response = await self.client.delete(f"/api/wallets/{wallet_id}")
+        response.raise_for_status()
+
     async def set_default_wallet(self, wallet_id: str) -> dict[str, Any]:
         response = await self.client.post(f"/api/wallets/{wallet_id}/set-default")
         response.raise_for_status()
