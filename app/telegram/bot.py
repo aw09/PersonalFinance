@@ -19,6 +19,7 @@ from telegram import (
     InlineKeyboardMarkup,
     ReplyKeyboardMarkup,
     Update,
+    CallbackQuery,
 )
 from telegram.constants import ParseMode
 from telegram.ext import (
@@ -31,6 +32,7 @@ from telegram.ext import (
     filters,
 )
 from telegram.error import BadRequest
+import asyncio
 
 try:
     from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -42,6 +44,9 @@ from ..models.transaction import TransactionType
 from .api_client import FinanceApiClient
 
 logger = logging.getLogger(__name__)
+_application: Application | None = None
+_api_client: FinanceApiClient | None = None
+_lock = asyncio.Lock()
 
 HELP_OVERVIEW = textwrap.dedent(
     """
