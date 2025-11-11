@@ -33,6 +33,7 @@ class TransactionCreate(BaseModel):
     metadata: Optional[dict[str, Any]] = None
     source: str = Field(default="manual", max_length=32)
     user_id: UUID
+    wallet_id: Optional[UUID] = None
 
     @field_validator("type", mode="before")
     @classmethod
@@ -64,5 +65,6 @@ class TransactionRead(BaseModel):
     metadata: Optional[dict[str, Any]] = Field(default=None, alias="metadata_json")
     source: str
     user_id: UUID
+    wallet_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime

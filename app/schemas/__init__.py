@@ -12,6 +12,14 @@ from .transaction import (
     TransactionRead,
     TransactionType,
 )
+from .wallet import (
+    WalletCreate,
+    WalletRead,
+    WalletTransactionRequest,
+    WalletTransferRequest,
+    WalletTransferResponse,
+    WalletUpdate,
+)
 from .user import UserCreate, UserRead
 
 __all__ = [
@@ -27,4 +35,10 @@ __all__ = [
     "InstallmentPaymentRequest",
     "UserCreate",
     "UserRead",
+    "WalletCreate",
+    "WalletRead",
+    "WalletUpdate",
+    "WalletTransactionRequest",
+    "WalletTransferRequest",
+    "WalletTransferResponse",
 ]

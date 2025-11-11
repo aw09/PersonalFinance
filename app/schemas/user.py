@@ -20,3 +20,4 @@ class UserRead(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    default_wallet_id: UUID | None = None

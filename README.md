@@ -2,10 +2,11 @@
 
 Dead simple personal finance backend built with FastAPI and PostgreSQL. Features:
 - Record transactions for expense, income, debts, and receivables
-- Track debt agreements, including their installment schedules
+- Manage wallets (regular, investment, and credit) with automatic “Main Wallet” creation, balance updates, and per-user default wallets
+- Track debt agreements, including installment schedules, partial repayments, and summaries
 - Accept receipt images and use Google's Gemini LLM to extract structured transactions (no manual OCR needed)
-- Optional Telegram bot interface for logging transactions on the go
-- Multi-user aware: transactions and debts belong to users identified by their Telegram account (the bot auto-creates them on first message)
+- Telegram bot for quick entry (slash commands, text shorthand, and receipt uploads) plus automatic user provisioning
+- Multi-user aware: all entities are scoped to the Telegram user that created them
 
 ## Project layout
 
@@ -48,6 +49,30 @@ app/
 
    When `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, and `BACKEND_BASE_URL` are set, the bot registers a webhook automatically and begins processing updates through the FastAPI endpoint.
 
+## Wallets
+
+Every user starts with a “Main Wallet” (type `regular`) that acts as their default balance bucket. Additional wallets can be created to separate investment funds or credit accounts:
+
+- `POST /api/wallets` with `{"user_id": "...", "name": "...", "type": "regular|investment|credit", "make_default": false}`
+- `GET /api/wallets?user_id=...` to see balances and which wallet is currently marked as default
+- `POST /api/wallets/{wallet_id}/deposit|withdraw|adjust` to move money in or out (each call creates a linked transaction)
+- `POST /api/wallets/transfer` to move money between two wallets (uses separate transactions for each side).
+- `POST /api/wallets/{wallet_id}/set-default` to change the default wallet for future transactions
+
+Credit wallets accept optional `credit_limit` and `settlement_day` fields; investment wallets can be adjusted to reflect market value using the `adjust` endpoint.
+
+Transactions created through the API or the Telegram bot automatically attach to the user's default wallet. Prefix Telegram commands with `@wallet` (for example, `/add @travel expense 150000 flight`) to post directly into a specific wallet without changing the default.
+
+### Telegram commands
+
+- `/add [type] <amount> <description>` - record an expense, income, debt, or receivable. Supports shorthand such as `e cafe 50000 lunch`.
+- `/receipt` - send a photo to extract a transaction from a receipt using Gemini (add `@wallet` in the caption to save into a specific wallet).
+- `/owed [name]` - list outstanding receivables (with optional name filter).
+- `/report [range]` - show summaries for today, mtd, ytd, 1 week, 1 month, etc.
+- `/recent [@wallet] [limit|since|per]` - list the latest transactions with flexible pagination. Use `limit=n` to cap the total rows, `per=n` to change the page size (default 10), and `since=YYYY-MM-DD` to filter by date. Pagination buttons appear automatically when more data is available.
+- `/wallet <action>` - list wallets, add/edit them, transfer funds between wallets, or change the default wallet (e.g. `/wallet transfer 50000 Main Investment`).
+- `/help` - show the command reference inside Telegram.
+
 ### Docker
 
 You can run the API inside a container:
@@ -73,6 +98,7 @@ TELEGRAM_BOT_TOKEN=bot-token-from-botfather
 TELEGRAM_WEBHOOK_SECRET=choose-a-random-secret
 TELEGRAM_REGISTER_WEBHOOK_ON_START=false
 BACKEND_BASE_URL=https://your-public-domain.example
+INTERNAL_BACKEND_BASE_URL=http://service.internal:8000
 AUTO_RUN_MIGRATIONS=false
 LLM_RECEIPT_PROMPT_PATH=prompts/receipt_prompt.txt
 ```

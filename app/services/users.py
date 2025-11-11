@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.user import User
 from ..schemas.user import UserCreate
+from .wallets import ensure_default_wallet
 
 
 async def create_user(session: AsyncSession, payload: UserCreate) -> User:
@@ -17,12 +18,14 @@ async def create_user(session: AsyncSession, payload: UserCreate) -> User:
             existing.full_name = payload.full_name
             await session.commit()
             await session.refresh(existing)
+        await ensure_default_wallet(session, existing.id)
         return existing
 
     user = User(telegram_id=payload.telegram_id, full_name=payload.full_name)
     session.add(user)
     await session.commit()
     await session.refresh(user)
+    await ensure_default_wallet(session, user.id)
     return user
 
 

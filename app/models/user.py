@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from sqlalchemy import BigInteger, Boolean, String
+from uuid import UUID
+
+from sqlalchemy import BigInteger, Boolean, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -21,7 +23,22 @@ class User(Base):
         back_populates="user", cascade="all, delete-orphan"
     )
     debts: Mapped[list["Debt"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    default_wallet_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("wallets.id", ondelete="SET NULL"), nullable=True
+    )
+    wallets: Mapped[list["Wallet"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        foreign_keys="Wallet.user_id",
+    )
+    default_wallet: Mapped["Wallet | None"] = relationship(
+        "Wallet",
+        foreign_keys=[default_wallet_id],
+        post_update=True,
+        uselist=False,
+    )
 
 
 from .debt import Debt  # noqa: E402
 from .transaction import Transaction  # noqa: E402
+from .wallet import Wallet  # noqa: E402

@@ -38,12 +38,15 @@ class Transaction(Base):
     items: Mapped[Optional[list[dict]]] = mapped_column(JSONB, nullable=True)
     metadata_json: Mapped[Optional[dict]] = mapped_column("metadata", JSONB, nullable=True)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    wallet_id: Mapped[Optional[UUID]] = mapped_column(ForeignKey("wallets.id", ondelete="SET NULL"), nullable=True)
 
     debt_installment: Mapped[Optional["DebtInstallment"]] = relationship(
         back_populates="transaction", uselist=False
     )
     user: Mapped["User"] = relationship(back_populates="transactions")
+    wallet: Mapped[Optional["Wallet"]] = relationship(back_populates="transactions")
 
 
 from .debt import DebtInstallment  # noqa: E402  # avoid circular import at runtime
 from .user import User  # noqa: E402
+from .wallet import Wallet  # noqa: E402
