@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.db import get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.schemas.transaction import TransactionType  # noqa: E402
+from app.services.transactions import TransactionNotFoundError
 
 
 def build_transaction_payload(
@@ -135,6 +136,7 @@ class RoutingTests(unittest.TestCase):
         cls._create_tx_patch = patch("app.api.transactions.create_transaction", new_callable=AsyncMock)
         cls._list_tx_patch = patch("app.api.transactions.list_transactions", new_callable=AsyncMock)
         cls._get_tx_patch = patch("app.api.transactions.get_transaction", new_callable=AsyncMock)
+        cls._update_tx_patch = patch("app.api.transactions.update_transaction", new_callable=AsyncMock)
 
         cls._create_debt_patch = patch("app.api.debts.create_debt", new_callable=AsyncMock)
         cls._list_debt_patch = patch("app.api.debts.list_debts", new_callable=AsyncMock)
@@ -177,6 +179,7 @@ class RoutingTests(unittest.TestCase):
         cls.create_transaction_mock = cls._create_tx_patch.start()
         cls.list_transactions_mock = cls._list_tx_patch.start()
         cls.get_transaction_mock = cls._get_tx_patch.start()
+        cls.update_transaction_mock = cls._update_tx_patch.start()
 
         cls.create_debt_mock = cls._create_debt_patch.start()
         cls.list_debts_mock = cls._list_debt_patch.start()
@@ -225,6 +228,7 @@ class RoutingTests(unittest.TestCase):
             cls.create_transaction_mock,
             cls.list_transactions_mock,
             cls.get_transaction_mock,
+            cls.update_transaction_mock,
             cls.create_debt_mock,
             cls.list_debts_mock,
             cls.get_debt_mock,
@@ -258,6 +262,7 @@ class RoutingTests(unittest.TestCase):
             cls._create_tx_patch,
             cls._list_tx_patch,
             cls._get_tx_patch,
+            cls._update_tx_patch,
             cls._create_debt_patch,
             cls._list_debt_patch,
             cls._get_debt_patch,
@@ -450,6 +455,22 @@ class RoutingTests(unittest.TestCase):
         self.get_transaction_mock.return_value = None
         tx_id = uuid4()
         response = self.client.get(f"/api/transactions/{tx_id}")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["detail"], "Transaction not found")
+
+    def test_update_transaction_route(self) -> None:
+        tx_id = self.transaction["id"]
+        updated = {**self.transaction, "description": "Updated description"}
+        self.update_transaction_mock.return_value = updated
+        response = self.client.patch(f"/api/transactions/{tx_id}", json={"description": "Updated description"})
+        self.assertEqual(response.status_code, 200)
+        self.update_transaction_mock.assert_awaited_once()
+        self.assertEqual(response.json()["description"], "Updated description")
+
+    def test_update_transaction_not_found(self) -> None:
+        self.update_transaction_mock.side_effect = TransactionNotFoundError("Transaction not found")
+        tx_id = uuid4()
+        response = self.client.patch(f"/api/transactions/{tx_id}", json={"description": "Updated description"})
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json()["detail"], "Transaction not found")
 

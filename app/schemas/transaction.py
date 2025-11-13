@@ -49,6 +49,35 @@ class TransactionCreate(BaseModel):
         raise TypeError("Transaction type must be a string or TransactionType instance")
 
 
+class TransactionUpdate(BaseModel):
+    """Payload for updating an existing transaction."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: TransactionType | None = None
+    amount: Decimal | None = None
+    currency: str | None = Field(default=None, min_length=3, max_length=3)
+    description: Optional[str] = Field(default=None, max_length=512)
+    category: Optional[str] = Field(default=None, max_length=64)
+    occurred_at: date | None = None
+    items: Optional[list[TransactionItem]] = None
+    metadata: Optional[dict[str, Any]] = None
+    wallet_id: Optional[UUID] = None
+
+    @field_validator("type", mode="before")
+    @classmethod
+    def _normalise_type(cls, value: TransactionType | str | None) -> TransactionType | None:
+        """Allow case-insensitive transaction types when updating."""
+        if value is None or isinstance(value, TransactionType):
+            return value
+        if isinstance(value, str):
+            try:
+                return TransactionType(value.lower())
+            except ValueError as exc:
+                raise ValueError("Unsupported transaction type") from exc
+        raise TypeError("Transaction type must be a string, TransactionType instance, or null")
+
+
 class TransactionRead(BaseModel):
     """API response shape for transactions."""
 
