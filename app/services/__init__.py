@@ -3,8 +3,11 @@ from .debts import (
     get_debt,
     get_installment,
     list_debts,
+    list_debts_for_wallet,
     mark_installment_paid,
     update_debt,
+    debt_outstanding,
+    installment_remaining,
 )
 from .llm import get_receipt_service
 from .transactions import create_transaction, get_transaction, list_transactions
@@ -16,10 +19,15 @@ from .wallets import (
     list_wallets,
     set_default_wallet,
     update_wallet,
+    delete_wallet,
     wallet_adjust,
     wallet_deposit,
     wallet_transfer,
     wallet_withdraw,
+    credit_purchase,
+    credit_repayment,
+    generate_credit_statement,
+    calculate_investment_roe,
 )
 
 __all__ = [
@@ -28,10 +36,13 @@ __all__ = [
     "list_transactions",
     "create_debt",
     "list_debts",
+    "list_debts_for_wallet",
     "get_debt",
     "update_debt",
     "get_installment",
     "mark_installment_paid",
+    "debt_outstanding",
+    "installment_remaining",
     "get_receipt_service",
     "create_user",
     "list_users",
@@ -42,8 +53,14 @@ __all__ = [
     "update_wallet",
     "list_wallets",
     "get_wallet",
+    "delete_wallet",
     "set_default_wallet",
     "wallet_deposit",
     "wallet_withdraw",
     "wallet_adjust",
+    "wallet_transfer",
+    "credit_purchase",
+    "credit_repayment",
+    "generate_credit_statement",
+    "calculate_investment_roe",
 ]

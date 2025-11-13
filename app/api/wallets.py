@@ -1,11 +1,18 @@
-from typing import Annotated
+from datetime import date
+from typing import Annotated, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
 from ..schemas import (
+    CreditPurchaseRequest,
+    CreditRepaymentRequest,
+    CreditRepaymentResponse,
+    CreditStatementResponse,
+    DebtRead,
+    InvestmentRoeResponse,
     WalletCreate,
     WalletRead,
     WalletTransactionRequest,
@@ -14,7 +21,12 @@ from ..schemas import (
     WalletUpdate,
 )
 from ..services import (
+    calculate_investment_roe,
+    credit_purchase,
+    credit_repayment,
     create_wallet,
+    delete_wallet,
+    generate_credit_statement,
     get_user,
     get_wallet,
     list_wallets,
@@ -106,6 +118,19 @@ async def update_wallet_endpoint(
     return await _wallet_response(session, wallet)
 
 
+@router.delete("/{wallet_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_wallet_endpoint(
+    wallet_id: UUID,
+    session: SessionDep,
+) -> Response:
+    wallet = _ensure_wallet(await get_wallet(session, wallet_id))
+    try:
+        await delete_wallet(session, wallet)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.post("/{wallet_id}/deposit", response_model=WalletRead)
 async def wallet_deposit_endpoint(
     wallet_id: UUID,
@@ -176,5 +201,83 @@ async def wallet_set_default_endpoint(wallet_id: UUID, session: SessionDep) -> W
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     await session.refresh(wallet)
     return await _wallet_response(session, wallet)
+
+
+@router.post(
+    "/{wallet_id}/credit/purchase",
+    response_model=DebtRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def credit_purchase_endpoint(
+    wallet_id: UUID,
+    payload: CreditPurchaseRequest,
+    session: SessionDep,
+) -> DebtRead:
+    wallet = _ensure_wallet(await get_wallet(session, wallet_id))
+    try:
+        _, debt = await credit_purchase(session, wallet, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return DebtRead.model_validate(debt)
+
+
+@router.post("/{wallet_id}/credit/repay", response_model=CreditRepaymentResponse)
+async def credit_repayment_endpoint(
+    wallet_id: UUID,
+    payload: CreditRepaymentRequest,
+    session: SessionDep,
+) -> CreditRepaymentResponse:
+    wallet = _ensure_wallet(await get_wallet(session, wallet_id))
+    try:
+        result = await credit_repayment(session, wallet, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    wallet_read = await _wallet_response(session, result["wallet"])
+    source_read = None
+    if result.get("source_wallet"):
+        source_read = await _wallet_response(session, result["source_wallet"])
+    return CreditRepaymentResponse(
+        wallet=wallet_read,
+        source_wallet=source_read,
+        unapplied_amount=result["unapplied_amount"],
+    )
+
+
+@router.get("/{wallet_id}/credit/statement", response_model=CreditStatementResponse)
+async def credit_statement_endpoint(
+    wallet_id: UUID,
+    session: SessionDep,
+    reference_date: Optional[date] = Query(default=None),
+) -> CreditStatementResponse:
+    wallet = _ensure_wallet(await get_wallet(session, wallet_id))
+    try:
+        statement = await generate_credit_statement(
+            session,
+            wallet,
+            reference_date=reference_date,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return statement
+
+
+@router.get("/{wallet_id}/investment/roe", response_model=InvestmentRoeResponse)
+async def investment_roe_endpoint(
+    wallet_id: UUID,
+    session: SessionDep,
+    start_date: Optional[date] = Query(default=None),
+    end_date: Optional[date] = Query(default=None),
+) -> InvestmentRoeResponse:
+    wallet = _ensure_wallet(await get_wallet(session, wallet_id))
+    try:
+        roe = await calculate_investment_roe(
+            session,
+            wallet,
+            period_start=start_date,
+            period_end=end_date,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return roe
 
 

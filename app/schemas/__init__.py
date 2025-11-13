@@ -19,6 +19,11 @@ from .wallet import (
     WalletTransferRequest,
     WalletTransferResponse,
     WalletUpdate,
+    CreditPurchaseRequest,
+    CreditRepaymentRequest,
+    CreditRepaymentResponse,
+    CreditStatementResponse,
+    InvestmentRoeResponse,
 )
 from .user import UserCreate, UserRead
 
@@ -41,4 +46,9 @@ __all__ = [
     "WalletTransactionRequest",
     "WalletTransferRequest",
     "WalletTransferResponse",
+    "CreditPurchaseRequest",
+    "CreditRepaymentRequest",
+    "CreditRepaymentResponse",
+    "CreditStatementResponse",
+    "InvestmentRoeResponse",
 ]

@@ -62,6 +62,17 @@ class DummyMessage:
         self.reply_text = AsyncMock()
 
 
+
+class DummyCallbackQuery:
+    def __init__(self, data: str, *, from_user=None, message=None) -> None:
+        self.data = data
+        self.from_user = from_user
+        self.message = message
+        self.answer = AsyncMock()
+        self.edit_message_text = AsyncMock()
+
+
+
 class DummyFile:
     def __init__(self, data: bytes) -> None:
         self._data = data
@@ -154,6 +165,40 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
         payload = api_client.create_transaction.await_args.args[0]
         self.assertEqual(payload["type"], "expense")
         self.assertEqual(payload["description"], "indomaret")
+
+    async def test_free_text_multi_word_wallet_hint(self) -> None:
+        message = DummyMessage("@Main Wallet expense 75000 dinner")
+        update = SimpleNamespace(
+            message=message,
+            effective_user=SimpleNamespace(id=528101001, full_name="Faris Tester"),
+        )
+        api_client = AsyncMock()
+        api_client.ensure_user.return_value = {"id": str(UUID("11111111-2222-3333-4444-555555555555"))}
+        api_client.create_transaction.return_value = {
+            "type": "expense",
+            "amount": "75000.00",
+            "currency": "IDR",
+            "description": "dinner",
+            "wallet_id": "w-main",
+        }
+        api_client.list_wallets.return_value = [
+            {
+                "id": "w-main",
+                "name": "Main Wallet",
+                "type": "regular",
+                "currency": "IDR",
+            }
+        ]
+        context = SimpleNamespace(
+            application=SimpleNamespace(bot_data={"api_client": api_client}),
+            user_data={},
+        )
+
+        await bot.free_text_transaction(update, context)
+
+        api_client.create_transaction.assert_awaited_once()
+        payload = api_client.create_transaction.await_args.args[0]
+        self.assertEqual(payload.get("wallet_id"), "w-main")
 
     async def test_receipt_photo_parses_image(self) -> None:
         photo_data = b"fake-image"
@@ -307,14 +352,294 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
 
         self.assertIn('Transferred 50 K IDR', transfer_text)
         self.assertIn('Investment Fund', transfer_text)
+
+    async def test_wallet_delete_command(self) -> None:
+        message = DummyMessage('/wallet delete Travel confirm=yes')
+        update = SimpleNamespace(
+            message=message,
+            effective_user=SimpleNamespace(id=528101001, full_name='Faris Tester'),
+        )
+
+        api_client = AsyncMock()
+        api_client.ensure_user.return_value = {'id': 'user-1'}
+        api_client.list_wallets.return_value = [
+            {'id': 'w-main', 'name': 'Main Wallet', 'type': 'regular', 'is_default': True},
+            {'id': 'w-travel', 'name': 'Travel', 'type': 'regular', 'is_default': False},
+        ]
+        api_client.delete_wallet = AsyncMock()
+        context = SimpleNamespace(
+            application=SimpleNamespace(bot_data={'api_client': api_client}),
+            args=['delete', 'Travel', 'confirm=yes'],
+            user_data={},
+        )
+
+        await bot.wallet_command(update, context)
+
+        api_client.delete_wallet.assert_awaited_once_with('w-travel')
+        message.reply_text.assert_awaited()
+        self.assertIn('deleted', message.reply_text.await_args.args[0].lower())
+    async def test_wallet_command_menu_shows_keyboard(self) -> None:
+        message = DummyMessage('/wallet')
+        update = SimpleNamespace(
+            message=message,
+            effective_user=SimpleNamespace(id=528101001, full_name='Faris Tester'),
+        )
+        api_client = AsyncMock()
+        api_client.ensure_user.return_value = {'id': 'user-1'}
+        api_client.list_wallets.return_value = [
+            {
+                'id': 'w-main',
+                'name': 'Main Wallet',
+                'type': 'regular',
+                'balance': '0',
+                'currency': 'IDR',
+                'is_default': True,
+            }
+        ]
+        context = SimpleNamespace(
+            application=SimpleNamespace(bot_data={'api_client': api_client}),
+            args=[],
+            user_data={},
+        )
+
+        await bot.wallet_command(update, context)
+
+        message.reply_text.assert_awaited_once()
+        reply_kwargs = message.reply_text.await_args.kwargs
+        self.assertIsInstance(reply_kwargs.get('reply_markup'), InlineKeyboardMarkup)
+        self.assertIn('Wallets:', message.reply_text.await_args.args[0])
+
+    async def test_wallet_callback_list_shows_overview(self) -> None:
+        api_client = AsyncMock()
+        api_client.ensure_user.return_value = {'id': 'user-1'}
+        api_client.list_wallets.return_value = [
+            {
+                'id': 'w-main',
+                'name': 'Main Wallet',
+                'type': 'regular',
+                'balance': '0',
+                'currency': 'IDR',
+                'is_default': True,
+            }
+        ]
+        context = SimpleNamespace(
+            application=SimpleNamespace(bot_data={'api_client': api_client}),
+            user_data={},
+        )
+        query = DummyCallbackQuery(
+            f"{bot.WALLET_CALLBACK_PREFIX}list",
+            from_user=SimpleNamespace(id=528101001, full_name='Faris Tester'),
+        )
+        update = SimpleNamespace(callback_query=query)
+
+        await bot.wallet_callback(update, context)
+
+        query.edit_message_text.assert_awaited_once()
+        args = query.edit_message_text.await_args.args
+        self.assertIn('Wallets:', args[0])
+        kwargs = query.edit_message_text.await_args.kwargs
+        self.assertIsInstance(kwargs.get('reply_markup'), InlineKeyboardMarkup)
+
+    async def test_wallet_credit_statement(self) -> None:
+        message = DummyMessage('/wallet credit statement CC_BRI')
+        update = SimpleNamespace(
+            message=message,
+            effective_user=SimpleNamespace(id=528101001, full_name='Faris Tester'),
+        )
+        api_client = AsyncMock()
+        api_client.ensure_user.return_value = {'id': 'user-1'}
+        api_client.list_wallets.return_value = [
+            {
+                'id': 'w-cc',
+                'name': 'CC BRI',
+                'type': 'credit',
+                'balance': '-500000',
+                'currency': 'IDR',
+                'settlement_day': 25,
+            }
+        ]
+        api_client.credit_statement.return_value = {
+            'wallet_id': 'w-cc',
+            'period_start': '2025-05-26',
+            'period_end': '2025-06-25',
+            'settlement_date': '2025-06-25',
+            'amount_due': '1500000',
+            'minimum_due': '500000',
+            'installments': [
+                {
+                    'installment_id': 'i1',
+                    'installment_number': 1,
+                    'due_date': '2025-06-20',
+                    'amount_due': '500000',
+                    'paid_amount': '0',
+                    'wallet_transaction_id': None,
+                }
+            ],
+        }
+        context = SimpleNamespace(
+            application=SimpleNamespace(bot_data={'api_client': api_client}),
+            args=['credit', 'statement', 'CC_BRI'],
+            user_data={},
+        )
+
+        await bot.wallet_command(update, context)
+
+        api_client.credit_statement.assert_awaited_once()
+        message.reply_text.assert_awaited_once()
+        reply_text = '\n'.join(message.reply_text.await_args.args)
+        self.assertIn('credit statement', reply_text.lower())
+        self.assertIn('amount due', reply_text.lower())
+
+    async def test_wallet_credit_purchase(self) -> None:
+        message = DummyMessage('/wallet credit purchase CC_BRI 150000 installments=3 desc=Gadget')
+        update = SimpleNamespace(
+            message=message,
+            effective_user=SimpleNamespace(id=528101001, full_name='Faris Tester'),
+        )
+        api_client = AsyncMock()
+        api_client.ensure_user.return_value = {'id': 'user-1'}
+        api_client.list_wallets.return_value = [
+            {
+                'id': 'w-cc',
+                'name': 'CC BRI',
+                'type': 'credit',
+                'balance': '-500000',
+                'currency': 'IDR',
+            }
+        ]
+        api_client.credit_purchase.return_value = {
+            'id': 'debt-1',
+            'installments': [
+                {
+                    'installment_id': 'i1',
+                    'installment_number': 1,
+                    'due_date': '2025-07-10',
+                    'amount': '50000',
+                }
+            ],
+        }
+        context = SimpleNamespace(
+            application=SimpleNamespace(bot_data={'api_client': api_client}),
+            args=['credit', 'purchase', 'CC_BRI', '150000', 'installments=3', 'desc=Gadget'],
+            user_data={},
+        )
+
+        await bot.wallet_command(update, context)
+
+        api_client.credit_purchase.assert_awaited_once()
+        payload = api_client.credit_purchase.await_args.args[1]
+        self.assertEqual(payload['amount'], '150000.00')
+        self.assertEqual(payload['installments'], 3)
+        message.reply_text.assert_awaited_once()
+        reply_text = '\n'.join(message.reply_text.await_args.args)
+        self.assertIn('credit purchase', reply_text.lower())
+        self.assertIn('installments created: 3', reply_text.lower())
+
+    async def test_wallet_credit_repay(self) -> None:
+        message = DummyMessage('/wallet credit repay CC_BRI 200000 from=Main desc=Bill')
+        update = SimpleNamespace(
+            message=message,
+            effective_user=SimpleNamespace(id=528101001, full_name='Faris Tester'),
+        )
+        api_client = AsyncMock()
+        api_client.ensure_user.return_value = {'id': 'user-1'}
+        api_client.list_wallets.return_value = [
+            {
+                'id': 'w-cc',
+                'name': 'CC BRI',
+                'type': 'credit',
+                'balance': '-500000',
+                'currency': 'IDR',
+            },
+            {
+                'id': 'w-main',
+                'name': 'Main Wallet',
+                'type': 'regular',
+                'balance': '1000000',
+                'currency': 'IDR',
+            },
+        ]
+        api_client.credit_repayment.return_value = {
+            'wallet': {'id': 'w-cc'},
+            'source_wallet': {'id': 'w-main', 'name': 'Main Wallet'},
+            'unapplied_amount': '0',
+        }
+        api_client.credit_statement.return_value = {
+            'wallet_id': 'w-cc',
+            'period_start': '2025-05-26',
+            'period_end': '2025-06-25',
+            'settlement_date': '2025-06-25',
+            'amount_due': '1000000',
+            'minimum_due': '300000',
+            'installments': [],
+        }
+        context = SimpleNamespace(
+            application=SimpleNamespace(bot_data={'api_client': api_client}),
+            args=['credit', 'repay', 'CC_BRI', '200000', 'from=Main', 'desc=Bill'],
+            user_data={},
+        )
+
+        await bot.wallet_command(update, context)
+
+        api_client.credit_repayment.assert_awaited_once()
+        repay_payload = api_client.credit_repayment.await_args.args[1]
+        self.assertEqual(repay_payload['amount'], '200000.00')
+        self.assertEqual(repay_payload['source_wallet_id'], 'w-main')
+        message.reply_text.assert_awaited_once()
+        reply_text = '\n'.join(message.reply_text.await_args.args)
+        self.assertIn('applied repayment', reply_text.lower())
+        self.assertIn('current bill', reply_text.lower())
+
+    async def test_wallet_investment_roe(self) -> None:
+        message = DummyMessage('/wallet investment roe Mutual start=2025-01-01 end=2025-01-31')
+        update = SimpleNamespace(
+            message=message,
+            effective_user=SimpleNamespace(id=528101001, full_name='Faris Tester'),
+        )
+        api_client = AsyncMock()
+        api_client.ensure_user.return_value = {'id': 'user-1'}
+        api_client.list_wallets.return_value = [
+            {
+                'id': 'w-invest',
+                'name': 'Mutual',
+                'type': 'investment',
+                'balance': '1000000',
+                'currency': 'IDR',
+            }
+        ]
+        api_client.investment_roe.return_value = {
+            'wallet_id': 'w-invest',
+            'period_start': '2025-01-01',
+            'period_end': '2025-01-31',
+            'contributions': '500000',
+            'withdrawals': '100000',
+            'net_gain': '400000',
+            'roe_percentage': '80.0',
+        }
+        context = SimpleNamespace(
+            application=SimpleNamespace(bot_data={'api_client': api_client}),
+            args=['investment', 'roe', 'Mutual', 'start=2025-01-01', 'end=2025-01-31'],
+            user_data={},
+        )
+
+        await bot.wallet_command(update, context)
+
+        api_client.investment_roe.assert_awaited_once()
+        message.reply_text.assert_awaited_once()
+        reply_text = '\n'.join(message.reply_text.await_args.args)
+        self.assertIn('investment roe', reply_text.lower())
+        self.assertIn('roe:', reply_text.lower())
+
     async def test_help_command_lists_features(self) -> None:
         message = DummyMessage()
         update = SimpleNamespace(message=message)
         await bot.help_command(update, SimpleNamespace(args=[]))
         message.reply_text.assert_awaited_once()
         help_text = message.reply_text.await_args.args[0]
+        reply_markup = message.reply_text.await_args.kwargs.get("reply_markup")
         self.assertIn("Quick capture", help_text)
         self.assertIn("/help wallet", help_text)
+        self.assertIsInstance(reply_markup, InlineKeyboardMarkup)
 
     async def test_help_command_wallet_topic(self) -> None:
         message = DummyMessage()
@@ -324,6 +649,21 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
         help_text = message.reply_text.await_args.args[0]
         self.assertIn("/wallet add", help_text)
         self.assertIn("Prefix transactions with @wallet", help_text)
+
+
+    async def test_help_callback_wallet_topic(self) -> None:
+        message = DummyMessage()
+        query = DummyCallbackQuery(f"{bot.HELP_CALLBACK_PREFIX}wallet", from_user=SimpleNamespace(id=528101001, full_name="Faris Tester"), message=message)
+        context = SimpleNamespace(application=SimpleNamespace(bot_data={}), user_data={})
+        update = SimpleNamespace(callback_query=query)
+
+        await bot.help_callback(update, context)
+
+        query.edit_message_text.assert_awaited_once()
+        args = query.edit_message_text.await_args.args
+        self.assertIn("/wallet add", args[0])
+        kwargs = query.edit_message_text.await_args.kwargs
+        self.assertIsInstance(kwargs.get("reply_markup"), InlineKeyboardMarkup)
 
     async def test_help_command_unknown_topic(self) -> None:
         message = DummyMessage()

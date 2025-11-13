@@ -54,6 +54,9 @@ class DebtRead(BaseModel):
     interest_rate: Optional[Decimal]
     status: str
     user_id: UUID
+    category: str
+    wallet_id: Optional[UUID]
+    beneficiary_name: Optional[str]
     created_at: datetime
     updated_at: datetime
     installments: list[DebtInstallmentRead]
@@ -70,6 +73,9 @@ class DebtCreate(BaseModel):
     interest_rate: Optional[Decimal] = Field(default=None)
     frequency_months: int = Field(default=1, gt=0, le=12)
     user_id: UUID
+    category: str = Field(default="manual", max_length=32)
+    wallet_id: Optional[UUID] = None
+    beneficiary_name: Optional[str] = Field(default=None, max_length=128)
 
 
 class DebtUpdate(BaseModel):

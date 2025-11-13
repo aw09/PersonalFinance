@@ -1,4 +1,4 @@
-from typing import Annotated, Optional
+from typing import Annotated, Any, Mapping, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -26,10 +26,22 @@ router = APIRouter()
 SessionDep = Annotated[AsyncSession, Depends(get_db)]
 
 
+def _debt_to_read(debt: Any) -> DebtRead:
+    """Normalise service responses (dicts or ORM objects) into DebtRead."""
+    if isinstance(debt, Mapping):
+        payload = dict(debt)
+        payload.setdefault("category", "manual")
+        payload.setdefault("wallet_id", None)
+        payload.setdefault("beneficiary_name", None)
+        payload.setdefault("installments", payload.get("installments", []))
+        return DebtRead.model_validate(payload)
+    return DebtRead.model_validate(debt)
+
+
 @router.post("", response_model=DebtRead, status_code=status.HTTP_201_CREATED)
 async def create_debt_endpoint(payload: DebtCreate, session: SessionDep) -> DebtRead:
     debt = await create_debt(session, payload)
-    return DebtRead.model_validate(debt)
+    return _debt_to_read(debt)
 
 
 @router.get("", response_model=list[DebtRead])
@@ -37,7 +49,7 @@ async def list_debts_endpoint(
     session: SessionDep, user_id: Optional[UUID] = Query(default=None)
 ) -> list[DebtRead]:
     debts = await list_debts(session, user_id=user_id)
-    return [DebtRead.model_validate(d) for d in debts]
+    return [_debt_to_read(d) for d in debts]
 
 
 @router.get("/{debt_id}", response_model=DebtRead)
@@ -45,7 +57,7 @@ async def get_debt_endpoint(debt_id: UUID, session: SessionDep) -> DebtRead:
     debt = await get_debt(session, debt_id)
     if not debt:
         raise HTTPException(status_code=404, detail="Debt not found")
-    return DebtRead.model_validate(debt)
+    return _debt_to_read(debt)
 
 
 @router.patch("/{debt_id}", response_model=DebtRead)
@@ -54,7 +66,7 @@ async def update_debt_endpoint(debt_id: UUID, payload: DebtUpdate, session: Sess
     if not debt:
         raise HTTPException(status_code=404, detail="Debt not found")
     debt = await update_debt(session, debt, payload)
-    return DebtRead.model_validate(debt)
+    return _debt_to_read(debt)
 
 
 @router.post("/installments/{installment_id}/pay", response_model=DebtInstallmentRead)

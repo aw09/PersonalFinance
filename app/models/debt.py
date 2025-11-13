@@ -26,11 +26,17 @@ class Debt(Base):
     )
     status: Mapped[str] = mapped_column(String(32), default="active", nullable=False)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    category: Mapped[str] = mapped_column(String(32), default="manual", nullable=False)
+    wallet_id: Mapped[Optional[UUID]] = mapped_column(
+        ForeignKey("wallets.id", ondelete="SET NULL"), nullable=True
+    )
+    beneficiary_name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
 
     installments: Mapped[list["DebtInstallment"]] = relationship(
         back_populates="debt", cascade="all, delete-orphan"
     )
     user: Mapped["User"] = relationship(back_populates="debts")
+    wallet: Mapped[Optional["Wallet"]] = relationship()
 
 
 class DebtInstallment(Base):
@@ -76,3 +82,4 @@ class DebtInstallmentPayment(Base):
 
 from .transaction import Transaction  # noqa: E402  # avoid circular import during definition
 from .user import User  # noqa: E402
+from .wallet import Wallet  # noqa: E402
