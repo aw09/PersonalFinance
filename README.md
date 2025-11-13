@@ -76,7 +76,7 @@ Transactions created through the API or the Telegram bot automatically attach to
 - `/report [range]` - show summaries for today, mtd, ytd, 1 week, 1 month, etc.
 - `/recent [@wallet] [limit|since|per]` - list the latest transactions with flexible pagination. Use `limit=n` to cap the total rows, `per=n` to change the page size (default 10), and `since=YYYY-MM-DD` to filter by date. Pagination buttons appear automatically when more data is available.
 - `/wallet <action>` - list wallets, add/edit them, transfer funds between wallets, or change the default wallet (e.g. `/wallet transfer 50000 Main Investment`). Try `/wallet credit statement <wallet>`, `/wallet credit purchase <wallet> <amount> [installments=3]`, `/wallet credit repay <wallet> <amount> [from=@wallet]`, or `/wallet investment roe <wallet> [start=...] [end=...]` for the new credit and investment helpers.
-- `/transaction <id>` - show transaction details (including any extracted line items); run `/transaction edit <id> field=value ...` to update amount, description, category, date, wallet, type, or currency.
+- `/transaction <id>` - show transaction details (including any extracted line items); run `/transaction edit <id> field=value ...` to update amount, description, category, date, wallet, type, or currency. Detail cards include an Edit button that walks you through choosing a field (wallet, amount, description, type, or currency) before you send the updated value back in chat.
 - `/help` - show the command reference inside Telegram.
 
 ### Docker
