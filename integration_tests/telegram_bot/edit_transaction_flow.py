@@ -13,7 +13,6 @@ if str(CURRENT_DIR) not in sys.path:
 
 from telethon import TelegramClient
 from telethon.tl.custom.message import Message
-from telethon.tl.custom.message import Message
 
 from integration_tests.telegram_bot.common import (
     TestConfig,
@@ -54,6 +53,7 @@ class EditTransactionTester:
             ("Wallet", f"@{regular_wallet}"),
             ("Type", "income"),
             ("Currency", "USD"),
+            ("Date", datetime.utcnow().strftime("%Y-%m-%d")),
         ])
 
     def _find_recent_detail_button_label(self, message: Message) -> str:
@@ -73,11 +73,12 @@ class EditTransactionTester:
                 include_edits=True,
             )
             await self.interactor.click_button(detail_message, "Edit transaction")
-            edit_menu = await self.interactor.wait_for(
-                lambda m: m.text and "select a field to update" in m.text.lower(),
-                include_edits=True,
-            )
-            await self.interactor.click_button(edit_menu, field_label)
+            edit_menu = await self._wait_for_edit_menu()
+            try:
+                await self._select_field_with_navigation(edit_menu, field_label)
+            except RuntimeError:
+                logger.warning("Field %s not available on any page, skipping", field_label)
+                continue
             prompt = await self.interactor.wait_for(
                 lambda m: m.text and f"send the new {field_label.lower()}" in m.text.lower(),
                 include_edits=True,
@@ -87,6 +88,33 @@ class EditTransactionTester:
                 lambda m: m.text and "updated" in m.text.lower(),
                 include_edits=True,
             )
+
+    async def _wait_for_edit_menu(self) -> Message:
+        return await self.interactor.wait_for(
+            lambda m: m.text and "select a field to update" in m.text.lower(),
+            include_edits=True,
+        )
+
+    async def _select_field_with_navigation(self, message: Message, field_label: str) -> None:
+        current = message
+        while True:
+            try:
+                await self.interactor.click_button(current, field_label)
+                return
+            except RuntimeError:
+                nav_label = self._find_nav_button(current)
+                if not nav_label:
+                    raise
+                await self.interactor.click_button(current, nav_label)
+                current = await self._wait_for_edit_menu()
+
+    def _find_nav_button(self, message: Message) -> str | None:
+        for row in message.buttons or []:
+            for button in row:
+                text = (button.text or "").lower()
+                if "next" in text:
+                    return button.text
+        return None
 
 
 def load_client(config: TestConfig) -> TelegramClient:

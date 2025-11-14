@@ -156,6 +156,7 @@ TRANSACTION_CALLBACK_PREFIX = "transaction:"
 TRANSACTION_CALLBACK_EDIT_MENU = f"{TRANSACTION_CALLBACK_PREFIX}m:"
 TRANSACTION_CALLBACK_EDIT_FIELD_PREFIX = f"{TRANSACTION_CALLBACK_PREFIX}f:"
 TRANSACTION_CALLBACK_CANCEL_PREFIX = f"{TRANSACTION_CALLBACK_PREFIX}c:"
+EDIT_MENU_PAGE_SIZE = 4
 HELP_CALLBACK_PREFIX = "help:"
 WALLET_CALLBACK_PREFIX = "wallet:"
 WALLET_FLOW_PREFIX = "wf:"
@@ -691,6 +692,7 @@ EDITABLE_TRANSACTION_FIELDS: tuple[tuple[str, str], ...] = (
     ("wallet", "Wallet"),
     ("type", "Type"),
     ("currency", "Currency"),
+    ("occurred_at", "Date"),
 )
 
 EDITABLE_TRANSACTION_FIELD_LABELS: dict[str, str] = {
@@ -704,7 +706,13 @@ EDITABLE_TRANSACTION_FIELD_HINTS: dict[str, str] = {
     "wallet": "Provide a wallet name (you can prefix with @).",
     "type": "Use expense, income, debt, or receivable.",
     "currency": "Provide a 3-letter code like USD.",
+    "occurred_at": "Send a date in YYYY-MM-DD format.",
 }
+
+
+def _transaction_edit_menu_callback(transaction_id: str, page: int = 0) -> str:
+    page_part = f"{page}:" if page else ""
+    return f"{TRANSACTION_CALLBACK_EDIT_MENU}{page_part}{transaction_id}"
 
 
 def _transaction_detail_keyboard(transaction_id: str, include_back: bool) -> InlineKeyboardMarkup:
@@ -712,7 +720,7 @@ def _transaction_detail_keyboard(transaction_id: str, include_back: bool) -> Inl
         [
             InlineKeyboardButton(
                 "Edit transaction",
-                callback_data=f"{TRANSACTION_CALLBACK_EDIT_MENU}{transaction_id}",
+                callback_data=_transaction_edit_menu_callback(transaction_id),
             )
         ]
     ]
@@ -1155,6 +1163,13 @@ async def _handle_pending_transaction_edit(update: Update, context: ContextTypes
             await message.reply_text("Currency must be a 3-letter code.")
             return True
         payload["currency"] = currency_value
+    elif field == "occurred_at":
+        try:
+            parsed_date = date.fromisoformat(text)
+        except ValueError:
+            await message.reply_text("Use YYYY-MM-DD format for dates.")
+            return True
+        payload["occurred_at"] = parsed_date.isoformat()
     elif field == "wallet":
         wallet_hint = text.lstrip("@").strip()
         if not wallet_hint:
@@ -2339,6 +2354,7 @@ async def _show_transaction_edit_menu(
     query: "CallbackQuery",
     context: ContextTypes.DEFAULT_TYPE,
     transaction_id: str,
+    page: int = 0,
 ) -> None:
     api_client: "FinanceApiClient" = context.application.bot_data["api_client"]
     try:
@@ -2359,15 +2375,34 @@ async def _show_transaction_edit_menu(
         "Select a field to update:",
     ]
     keyboard_rows: list[list[InlineKeyboardButton]] = []
-    for field, label in EDITABLE_TRANSACTION_FIELDS:
+    start = max(0, page) * EDIT_MENU_PAGE_SIZE
+    chunk = EDITABLE_TRANSACTION_FIELDS[start : start + EDIT_MENU_PAGE_SIZE]
+    for field, label in chunk:
         keyboard_rows.append(
             [
                 InlineKeyboardButton(
                     label,
-                callback_data=f"{TRANSACTION_CALLBACK_EDIT_FIELD_PREFIX}{field}:{transaction_id}",
+                    callback_data=f"{TRANSACTION_CALLBACK_EDIT_FIELD_PREFIX}{field}:{transaction_id}",
                 )
             ]
         )
+    nav_buttons: list[InlineKeyboardButton] = []
+    if start > 0:
+        nav_buttons.append(
+            InlineKeyboardButton(
+                "< Prev",
+                callback_data=_transaction_edit_menu_callback(transaction_id, page - 1),
+            )
+        )
+    if start + len(chunk) < len(EDITABLE_TRANSACTION_FIELDS):
+        nav_buttons.append(
+            InlineKeyboardButton(
+                "Next >",
+                callback_data=_transaction_edit_menu_callback(transaction_id, page + 1),
+            )
+        )
+    if nav_buttons:
+        keyboard_rows.append(nav_buttons)
     keyboard_rows.append(
         [InlineKeyboardButton("Back to details", callback_data=f"{TRANSACTION_CALLBACK_CANCEL_PREFIX}{transaction_id}")]
     )
@@ -2533,8 +2568,16 @@ async def transaction_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     payload = data[len(TRANSACTION_CALLBACK_PREFIX) :]
     if payload.startswith("m:"):
-        transaction_id = payload.split(":", 1)[1]
-        await _show_transaction_edit_menu(query, context, transaction_id)
+        rest = payload[len("m:") :]
+        page = 0
+        transaction_id = rest
+        if ":" in rest:
+            page_str, transaction_id = rest.split(":", 1)
+            try:
+                page = int(page_str)
+            except ValueError:
+                page = 0
+        await _show_transaction_edit_menu(query, context, transaction_id, page=page)
         return
     if payload.startswith("f:"):
         rest = payload[len("f:") :]
