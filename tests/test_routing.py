@@ -297,6 +297,7 @@ class RoutingTests(unittest.TestCase):
     def setUp(self) -> None:
         for mock in self.async_mocks:
             mock.reset_mock()
+            mock.side_effect = None
         self.get_receipt_service_mock.reset_mock()
 
         wallet_id = uuid4()

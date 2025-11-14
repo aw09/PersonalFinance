@@ -139,6 +139,8 @@ For end-to-end verification against the **production** Telegram bot (real backen
 
    # Advanced scenarios: credit purchase/installments, credit repay with @wallet source, lend/repay sequences
    python integration_tests/telegram_bot/advanced_flows.py
+   # Inline edit flow: exercises the recent detail card + field-by-field edit flow
+   python integration_tests/telegram_bot/edit_transaction_flow.py
    ```
    On first run you will be prompted for the Telegram login code sent to the test phone number (and, if 2-step verification is enabled, the password—either via `TELEGRAM_TEST_PASSWORD` or an interactive prompt). Subsequent runs reuse the saved session.
 
