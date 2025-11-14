@@ -10,7 +10,7 @@ from .debts import (
     installment_remaining,
 )
 from .llm import get_receipt_service
-from .transactions import create_transaction, get_transaction, list_transactions
+from .transactions import create_transaction, get_transaction, list_transactions, update_transaction
 from .users import create_user, get_user, get_user_by_telegram_id, list_users
 from .wallets import (
     create_wallet,
@@ -34,6 +34,7 @@ __all__ = [
     "create_transaction",
     "get_transaction",
     "list_transactions",
+    "update_transaction",
     "create_debt",
     "list_debts",
     "list_debts_for_wallet",

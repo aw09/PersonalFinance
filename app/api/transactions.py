@@ -7,8 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
 from ..models.transaction import TransactionType
-from ..schemas.transaction import TransactionCreate, TransactionRead
-from ..services import create_transaction, get_transaction, list_transactions
+from ..schemas.transaction import TransactionCreate, TransactionRead, TransactionUpdate
+from ..services import create_transaction, get_transaction, list_transactions, update_transaction
+from ..services.transactions import TransactionNotFoundError
 
 router = APIRouter()
 
@@ -53,4 +54,19 @@ async def get_transaction_endpoint(transaction_id: UUID, session: SessionDep) ->
     transaction = await get_transaction(session, transaction_id)
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
+    return TransactionRead.model_validate(transaction)
+
+
+@router.patch("/{transaction_id}", response_model=TransactionRead)
+async def update_transaction_endpoint(
+    transaction_id: UUID,
+    payload: TransactionUpdate,
+    session: SessionDep,
+) -> TransactionRead:
+    try:
+        transaction = await update_transaction(session, transaction_id, payload)
+    except TransactionNotFoundError:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     return TransactionRead.model_validate(transaction)

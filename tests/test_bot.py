@@ -751,8 +751,73 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
         message.reply_text.assert_awaited_once()
         recent_text = message.reply_text.await_args.args[0]
         self.assertIn("Recent transactions", recent_text)
-        self.assertIn("Lunch", recent_text)
-        self.assertIsNone(message.reply_text.await_args.kwargs.get("reply_markup"))
+        markup = message.reply_text.await_args.kwargs.get("reply_markup")
+        self.assertIsInstance(markup, InlineKeyboardMarkup)
+        button_label = markup.inline_keyboard[0][0].text
+        self.assertIn("Lunch", button_label)
+        filters = context.user_data.get("recent_filters", {})
+        self.assertEqual(filters.get("user_id"), "user-1")
+        self.assertEqual(filters.get("page_size"), bot.RECENT_DEFAULT_LIMIT)
+
+    async def test_transaction_callback_shows_edit_menu(self) -> None:
+        api_client = AsyncMock()
+        api_client.get_transaction.return_value = {
+            "id": "tx-123",
+            "type": "expense",
+            "amount": "12500",
+            "currency": "IDR",
+            "user_id": "user-1",
+        }
+        message = DummyMessage("placeholder")
+        query = DummyCallbackQuery(
+            f"{bot.TRANSACTION_CALLBACK_EDIT_MENU}tx-123",
+            from_user=SimpleNamespace(id=528101001, full_name="Faris Tester"),
+            message=message,
+        )
+        context = SimpleNamespace(
+            application=SimpleNamespace(bot_data={"api_client": api_client}),
+            user_data={},
+        )
+        await bot.transaction_callback(SimpleNamespace(callback_query=query), context)
+
+        query.answer.assert_awaited_once()
+        query.edit_message_text.assert_awaited_once()
+        edit_text = query.edit_message_text.await_args.args[0]
+        self.assertIn("Select a field to update", edit_text)
+        callback_data = query.edit_message_text.await_args.kwargs.get("reply_markup").inline_keyboard[0][0].callback_data
+        self.assertTrue(callback_data.startswith(bot.TRANSACTION_CALLBACK_EDIT_FIELD_PREFIX))
+
+    async def test_pending_transaction_edit_updates_transaction(self) -> None:
+        api_client = AsyncMock()
+        api_client.update_transaction.return_value = {
+            "id": "tx-123",
+            "type": "expense",
+            "amount": "15000",
+            "currency": "IDR",
+            "description": "Dinner",
+            "wallet_id": "w-1",
+        }
+        context = SimpleNamespace(
+            application=SimpleNamespace(bot_data={"api_client": api_client}),
+            user_data={},
+        )
+        bot._set_pending_transaction_edit(
+            context,
+            transaction_id="tx-123",
+            field="amount",
+            user_id="user-1",
+            chat_id=123,
+            message_id=456,
+        )
+        message = DummyMessage("15000")
+        update = SimpleNamespace(message=message)
+        with patch("app.telegram.bot._refresh_transaction_detail_inline", AsyncMock()) as refresh:
+            handled = await bot._handle_pending_transaction_edit(update, context)
+
+        self.assertTrue(handled)
+        api_client.update_transaction.assert_awaited_once_with("tx-123", {"amount": "15000.00"})
+        message.reply_text.assert_awaited_once()
+        refresh.assert_awaited_once()
 
     async def test_recent_command_with_wallet_and_limit(self) -> None:
         message = DummyMessage("/recent @travel limit=5")
@@ -791,7 +856,10 @@ class TelegramBotTests(IsolatedAsyncioTestCase):
         self.assertEqual(kwargs["offset"], 0)
         text = message.reply_text.await_args.args[0]
         self.assertIn("Travel", text)
-        self.assertIsNone(context.user_data.get("recent_filters"))
+        stored_filters = context.user_data.get("recent_filters")
+        self.assertEqual(stored_filters.get("wallet_id"), "w-travel")
+        self.assertEqual(stored_filters.get("max_results"), 5)
+        self.assertEqual(stored_filters.get("page_size"), 5)
 
     async def test_recent_command_since_enables_pagination(self) -> None:
         message = DummyMessage("/recent since=2025-01-01")
