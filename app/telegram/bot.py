@@ -194,15 +194,6 @@ def _flow_callback_data(
         parts.append(str(value))
     return ":".join(parts)
 
-MAIN_MENU_KEYBOARD = ReplyKeyboardMarkup(
-    [
-        ["/add", "/wallet"],
-        ["/recent", "/report"],
-        ["/owed", "/help"],
-    ],
-    resize_keyboard=True
-)
-
 HELP_INLINE_KEYBOARD = InlineKeyboardMarkup(
     [
         [
@@ -1054,7 +1045,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Types: expense, income, debt, receivable.\n"
         "Prefix with `@wallet` to target a specific wallet (e.g. `/add @travel expense 200 taxi`).",
         parse_mode=ParseMode.MARKDOWN,
-        reply_markup=MAIN_MENU_KEYBOARD,
     )
 
 
