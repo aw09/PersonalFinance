@@ -51,6 +51,7 @@ HELP_OVERVIEW = textwrap.dedent(
     - Wallets: /wallet list, add, edit, transfer, default - manage cash, investment ROE, and credit card statements or instalments.
     - Debts & repayments: /lend, /repay, /owed keep track of who owes you and installment schedules.
     - Reports: /report [range] for summaries, /recent [options] to browse transactions with pagination.
+    - Inspect entries with `/transaction <id>` to see line items and `/transaction edit <id> field=value ...` to adjust a recorded transaction.
 
     Need details? Try /help wallet, /help add, /help recent, /help report, or /help debts.
     """
@@ -114,6 +115,12 @@ HELP_TOPICS: dict[str, str] = {
 
 HELP_TOPICS["overview"] = HELP_OVERVIEW
 
+TRANSACTION_COMMAND_USAGE = (
+    "Usage:\n"
+    "/transaction <transaction_id> - show transaction details.\n"
+    "/transaction edit <transaction_id> field=value ... (amount, description, category, date, wallet, wallet_id, type, currency)."
+)
+
 try:
     USER_TIMEZONE = ZoneInfo("Asia/Jakarta")
 except ZoneInfoNotFoundError:
@@ -143,6 +150,12 @@ RECENT_DEFAULT_LIMIT = 10
 RECENT_CALLBACK_PREFIX = "recent:"
 RECENT_CALLBACK_NEXT = "recent:next"
 RECENT_CALLBACK_PREV = "recent:prev"
+RECENT_CALLBACK_DETAIL_PREFIX = f"{RECENT_CALLBACK_PREFIX}detail:"
+RECENT_CALLBACK_BACK = f"{RECENT_CALLBACK_PREFIX}back"
+TRANSACTION_CALLBACK_PREFIX = "transaction:"
+TRANSACTION_CALLBACK_EDIT_MENU = f"{TRANSACTION_CALLBACK_PREFIX}m:"
+TRANSACTION_CALLBACK_EDIT_FIELD_PREFIX = f"{TRANSACTION_CALLBACK_PREFIX}f:"
+TRANSACTION_CALLBACK_CANCEL_PREFIX = f"{TRANSACTION_CALLBACK_PREFIX}c:"
 HELP_CALLBACK_PREFIX = "help:"
 WALLET_CALLBACK_PREFIX = "wallet:"
 WALLET_FLOW_PREFIX = "wf:"
@@ -180,15 +193,6 @@ def _flow_callback_data(
     if value is not None:
         parts.append(str(value))
     return ":".join(parts)
-
-MAIN_MENU_KEYBOARD = ReplyKeyboardMarkup(
-    [
-        ["/add", "/wallet"],
-        ["/recent", "/report"],
-        ["/owed", "/help"],
-    ],
-    resize_keyboard=True
-)
 
 HELP_INLINE_KEYBOARD = InlineKeyboardMarkup(
     [
@@ -596,6 +600,176 @@ async def _format_recent_line(
     return f"- {occurred}: {tx_type} {amount_text} - *{description}*{wallet_suffix}"
 
 
+def _stringify_quantity(value: Any) -> str:
+    try:
+        text = format(Decimal(str(value)).normalize(), "f")
+    except (InvalidOperation, ValueError):
+        return str(value)
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def _format_transaction_items(items: list[dict[str, Any]], currency: str) -> list[str]:
+    lines: list[str] = []
+    for item in items:
+        name = _escape_markdown(str(item.get("name") or "item"))
+        quantity_value = item.get("quantity")
+        quantity_text = _stringify_quantity(quantity_value if quantity_value is not None else 1)
+        parts: list[str] = [f"{quantity_text}× {name}"]
+        unit_price = item.get("unit_price")
+        if unit_price is not None:
+            parts.append(f"@ {_format_amount_for_display(unit_price, currency)}")
+        total_price = item.get("total_price")
+        if total_price is not None:
+            parts.append(f"= {_format_amount_for_display(total_price, currency)}")
+        lines.append(f"- {' '.join(parts)}")
+    return lines
+
+
+async def _build_transaction_detail_text(
+    context: ContextTypes.DEFAULT_TYPE,
+    api_client: "FinanceApiClient",
+    user_id: str,
+    transaction: dict[str, Any],
+) -> str:
+    currency = transaction.get("currency", "IDR")
+    amount_text = _format_amount_for_display(transaction.get("amount", "0"), currency)
+    tx_type = _escape_markdown(str(transaction.get("type") or "transaction").capitalize())
+    lines: list[str] = [f"*{tx_type}* {amount_text}"]
+
+    occurred = transaction.get("occurred_at")
+    occurred_text = _escape_markdown(str(occurred)) if occurred else "-"
+    lines.append(f"Date: {occurred_text}")
+
+    description = _escape_markdown(str(transaction.get("description") or "No description"))
+    lines.append(f"Description: {description}")
+
+    wallet_label = None
+    wallet_id = transaction.get("wallet_id")
+    if wallet_id:
+        wallet_record = await _get_wallet_by_id(context, api_client, user_id, wallet_id)
+        if wallet_record:
+            wallet_label = wallet_record.get("name")
+    wallet_text = _escape_markdown(wallet_label) if wallet_label else "Default wallet"
+    lines.append(f"Wallet: {wallet_text}")
+
+    category = transaction.get("category")
+    if category:
+        lines.append(f"Category: {_escape_markdown(category)}")
+
+    metadata = transaction.get("metadata")
+    if metadata:
+        meta_parts = [
+            f"{_escape_markdown(str(key))}={_escape_markdown(str(value))}"
+            for key, value in metadata.items()
+        ]
+        if meta_parts:
+            lines.append(f"Metadata: {', '.join(meta_parts)}")
+
+    lines.append(f"Transaction ID: `{transaction.get('id')}`")
+
+    items = transaction.get("items") or []
+    if items:
+        lines.append("")
+        lines.append("Items:")
+        lines.extend(_format_transaction_items(items, currency))
+
+    lines.append("")
+    lines.append(
+        "Edit with `/transaction edit "
+        f"{transaction.get('id')} amount=... description=... category=... date=YYYY-MM-DD wallet=@name type=... currency=XYZ`"
+    )
+
+    return "\n".join(lines)
+
+
+EDITABLE_TRANSACTION_FIELDS: tuple[tuple[str, str], ...] = (
+    ("amount", "Amount"),
+    ("description", "Description"),
+    ("category", "Category"),
+    ("wallet", "Wallet"),
+    ("type", "Type"),
+    ("currency", "Currency"),
+)
+
+EDITABLE_TRANSACTION_FIELD_LABELS: dict[str, str] = {
+    field: label for field, label in EDITABLE_TRANSACTION_FIELDS
+}
+
+EDITABLE_TRANSACTION_FIELD_HINTS: dict[str, str] = {
+    "amount": "Send a number such as 12000 (commas allowed).",
+    "description": "Type the new description text.",
+    "category": "Type the new category name.",
+    "wallet": "Provide a wallet name (you can prefix with @).",
+    "type": "Use expense, income, debt, or receivable.",
+    "currency": "Provide a 3-letter code like USD.",
+}
+
+
+def _transaction_detail_keyboard(transaction_id: str, include_back: bool) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton(
+                "Edit transaction",
+                callback_data=f"{TRANSACTION_CALLBACK_EDIT_MENU}{transaction_id}",
+            )
+        ]
+    ]
+    if include_back:
+        rows.append([InlineKeyboardButton("Back to results", callback_data=RECENT_CALLBACK_BACK)])
+    return InlineKeyboardMarkup(rows)
+
+
+def _store_transaction_detail_context(context: ContextTypes.DEFAULT_TYPE, transaction_id: str, user_id: str) -> None:
+    state = _ensure_user_state(context)
+    ctx = state.setdefault("transaction_detail", {})
+    ctx[transaction_id] = {"user_id": user_id}
+
+
+def _get_transaction_detail_user_id(context: ContextTypes.DEFAULT_TYPE, transaction_id: str) -> str | None:
+    state = _ensure_user_state(context)
+    ctx = state.get("transaction_detail", {})
+    entry = ctx.get(transaction_id)
+    return entry.get("user_id") if entry else None
+
+
+def _set_pending_transaction_edit(
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    transaction_id: str,
+    field: str,
+    user_id: str,
+    chat_id: int,
+    message_id: int,
+) -> None:
+    state = _ensure_user_state(context)
+    state["pending_transaction_edit"] = {
+        "transaction_id": transaction_id,
+        "field": field,
+        "user_id": user_id,
+        "chat_id": chat_id,
+        "message_id": message_id,
+    }
+
+
+def _get_pending_transaction_edit(context: ContextTypes.DEFAULT_TYPE) -> dict[str, Any] | None:
+    return _ensure_user_state(context).get("pending_transaction_edit")
+
+
+def _clear_pending_transaction_edit(context: ContextTypes.DEFAULT_TYPE) -> None:
+    _ensure_user_state(context).pop("pending_transaction_edit", None)
+
+
+def _recent_detail_button_label(tx: dict[str, Any]) -> str:
+    label_source = str(tx.get("description") or tx.get("category") or tx.get("type") or "Details")
+    label_clean = re.sub(r"\s+", " ", label_source).strip()
+    if len(label_clean) > 16:
+        label_clean = label_clean[:13].rstrip() + "..."
+    amount_text = _format_amount_for_display(tx.get("amount", "0"), tx.get("currency", "IDR"))
+    return f"{label_clean} · {amount_text}"
+
+
 async def _generate_recent_page(
     context: ContextTypes.DEFAULT_TYPE,
     api_client: "FinanceApiClient",
@@ -640,15 +814,26 @@ async def _generate_recent_page(
     if not page_transactions:
         lines.append("No transactions found for the selected criteria.")
 
-    keyboard: InlineKeyboardMarkup | None = None
+    keyboard_rows: list[list[InlineKeyboardButton]] = []
+    for tx in page_transactions:
+        tx_id = str(tx.get("id"))
+        keyboard_rows.append(
+            [
+                InlineKeyboardButton(
+                    _recent_detail_button_label(tx),
+                    callback_data=f"{RECENT_CALLBACK_DETAIL_PREFIX}{tx_id}",
+                )
+            ]
+        )
     if offset > 0 or has_next:
-        buttons: list[InlineKeyboardButton] = []
+        nav_buttons: list[InlineKeyboardButton] = []
         if offset > 0:
-            buttons.append(InlineKeyboardButton("< Prev", callback_data=RECENT_CALLBACK_PREV))
+            nav_buttons.append(InlineKeyboardButton("< Prev", callback_data=RECENT_CALLBACK_PREV))
         if has_next:
-            buttons.append(InlineKeyboardButton("Next >", callback_data=RECENT_CALLBACK_NEXT))
-        if buttons:
-            keyboard = InlineKeyboardMarkup([buttons])
+            nav_buttons.append(InlineKeyboardButton("Next >", callback_data=RECENT_CALLBACK_NEXT))
+        if nav_buttons:
+            keyboard_rows.append(nav_buttons)
+    keyboard = InlineKeyboardMarkup(keyboard_rows) if keyboard_rows else None
 
     return "\n".join(lines), keyboard, len(page_transactions), has_next
 
@@ -722,6 +907,16 @@ class FinanceApiClient:
         if occurred_before:
             params["occurred_before"] = occurred_before
         response = await self.client.get("/api/transactions", params=params)
+        response.raise_for_status()
+        return response.json()
+
+    async def get_transaction(self, transaction_id: str) -> dict[str, Any]:
+        response = await self.client.get(f"/api/transactions/{transaction_id}")
+        response.raise_for_status()
+        return response.json()
+
+    async def update_transaction(self, transaction_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        response = await self.client.patch(f"/api/transactions/{transaction_id}", json=payload)
         response.raise_for_status()
         return response.json()
 
@@ -850,7 +1045,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Types: expense, income, debt, receivable.\n"
         "Prefix with `@wallet` to target a specific wallet (e.g. `/add @travel expense 200 taxi`).",
         parse_mode=ParseMode.MARKDOWN,
-        reply_markup=MAIN_MENU_KEYBOARD,
     )
 
 
@@ -916,8 +1110,101 @@ async def add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
+async def _handle_pending_transaction_edit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    pending = _get_pending_transaction_edit(context)
+    if not pending:
+        return False
+    message = update.message
+    if not message:
+        return True
+    text = (message.text or "").strip()
+    if not text:
+        await message.reply_text("Send the new value to continue editing.")
+        return True
+    if text.lower() == "cancel":
+        chat_id = pending["chat_id"]
+        message_id = pending["message_id"]
+        _clear_pending_transaction_edit(context)
+        await message.reply_text("Edit cancelled.")
+        await _refresh_transaction_detail_inline(context, pending["transaction_id"], chat_id, message_id)
+        return True
+    field = pending["field"]
+    api_client: "FinanceApiClient" = context.application.bot_data["api_client"]
+    payload: dict[str, Any] = {}
+    if field == "amount":
+        try:
+            amount_value = Decimal(text.replace(",", ""))
+        except (InvalidOperation, ValueError):
+            await message.reply_text("Amount must be numeric.")
+            return True
+        payload["amount"] = str(amount_value.quantize(Decimal("0.01")))
+    elif field == "description":
+        payload["description"] = text
+    elif field == "category":
+        payload["category"] = text
+    elif field == "type":
+        try:
+            tx_type = _resolve_transaction_type(text)
+        except ValueError as exc:
+            await message.reply_text(str(exc))
+            return True
+        payload["type"] = tx_type.value
+    elif field == "currency":
+        currency_value = text.upper()
+        if len(currency_value) != 3:
+            await message.reply_text("Currency must be a 3-letter code.")
+            return True
+        payload["currency"] = currency_value
+    elif field == "wallet":
+        wallet_hint = text.lstrip("@").strip()
+        if not wallet_hint:
+            await message.reply_text("Provide a wallet name.")
+            return True
+        try:
+            wallet_record = await _get_wallet_by_name(context, api_client, pending["user_id"], wallet_hint)
+        except ValueError as exc:
+            await message.reply_text(str(exc))
+            return True
+        payload["wallet_id"] = wallet_record["id"]
+    else:
+        await message.reply_text("Unsupported field.")
+        _clear_pending_transaction_edit(context)
+        return True
+
+    try:
+        data = await api_client.update_transaction(pending["transaction_id"], payload)
+    except httpx.HTTPStatusError as exc:
+        await message.reply_text(f"Could not update transaction: {exc.response.text}")
+        return True
+    except Exception:
+        logger.exception("Failed to update transaction %s", pending["transaction_id"])
+        await message.reply_text("Something went wrong while updating the transaction.")
+        return True
+
+    _clear_pending_transaction_edit(context)
+    amount_text = _format_amount_for_display(data["amount"], data["currency"])
+    wallet_label = None
+    wallet_id = data.get("wallet_id")
+    if wallet_id:
+        wallet_record = await _get_wallet_by_id(context, api_client, pending["user_id"], wallet_id)
+        if wallet_record:
+            wallet_label = wallet_record.get("name")
+    wallet_suffix = f" (wallet: {_escape_markdown(wallet_label)})" if wallet_label else ""
+    description_text = _escape_markdown(str(data.get("description") or "no description"))
+    await message.reply_text(
+        f"Updated {data['type']} of {amount_text} for *{description_text}*{wallet_suffix}.",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+    await _refresh_transaction_detail_inline(
+        context, data["id"], pending["chat_id"], pending["message_id"]
+    )
+    return True
+
+
 async def free_text_transaction(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
+        return
+    if await _handle_pending_transaction_edit(update, context):
         return
     tele_user = update.effective_user
     if tele_user is not None:
@@ -1978,6 +2265,225 @@ async def recent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user_state.pop("recent_offset", None)
 
 
+async def _render_recent_page(
+    query: "CallbackQuery",
+    context: ContextTypes.DEFAULT_TYPE,
+    api_client: "FinanceApiClient",
+    user: dict[str, Any],
+    filters: dict[str, Any],
+    offset: int,
+    user_state: dict[str, Any],
+) -> None:
+    page_size = filters["page_size"]
+    page_text, keyboard, count, has_next = await _generate_recent_page(
+        context, api_client, user, filters, offset
+    )
+    if count == 0 and offset > 0:
+        offset = max(0, offset - page_size)
+        page_text, keyboard, count, has_next = await _generate_recent_page(
+            context, api_client, user, filters, offset
+        )
+    filters["has_next"] = has_next
+    user_state["recent_offset"] = offset
+    user_state["recent_filters"] = filters
+    await query.edit_message_text(page_text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+
+
+async def _show_recent_transaction_detail(
+    query: "CallbackQuery",
+    context: ContextTypes.DEFAULT_TYPE,
+    api_client: "FinanceApiClient",
+    user_id: str,
+    transaction_id: str,
+) -> None:
+    try:
+        transaction = await api_client.get_transaction(transaction_id)
+    except httpx.HTTPStatusError as exc:
+        await query.edit_message_text(f"Could not load transaction: {exc.response.text}")
+        return
+    except Exception:
+        logger.exception("Failed to load transaction detail for %s", transaction_id)
+        await query.edit_message_text("Could not load the selected transaction.")
+        return
+    _store_transaction_detail_context(context, transaction_id, str(transaction["user_id"]))
+    detail_text = await _build_transaction_detail_text(context, api_client, user_id, transaction)
+    keyboard = _transaction_detail_keyboard(transaction_id, include_back=True)
+    await query.edit_message_text(detail_text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+
+
+async def _render_transaction_detail_from_api(
+    query: "CallbackQuery",
+    context: ContextTypes.DEFAULT_TYPE,
+    transaction_id: str,
+    include_back: bool = True,
+) -> None:
+    api_client: "FinanceApiClient" = context.application.bot_data["api_client"]
+    try:
+        transaction = await api_client.get_transaction(transaction_id)
+    except httpx.HTTPStatusError as exc:
+        await query.edit_message_text(f"Could not load transaction: {exc.response.text}")
+        return
+    except Exception:
+        logger.exception("Failed to load transaction detail for %s", transaction_id)
+        await query.edit_message_text("Could not load the selected transaction.")
+        return
+    _store_transaction_detail_context(context, transaction_id, str(transaction["user_id"]))
+    detail_text = await _build_transaction_detail_text(
+        context, api_client, str(transaction["user_id"]), transaction
+    )
+    keyboard = _transaction_detail_keyboard(transaction_id, include_back=include_back)
+    await query.edit_message_text(detail_text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+
+
+async def _show_transaction_edit_menu(
+    query: "CallbackQuery",
+    context: ContextTypes.DEFAULT_TYPE,
+    transaction_id: str,
+) -> None:
+    api_client: "FinanceApiClient" = context.application.bot_data["api_client"]
+    try:
+        transaction = await api_client.get_transaction(transaction_id)
+    except httpx.HTTPStatusError as exc:
+        await query.edit_message_text(f"Could not load transaction: {exc.response.text}")
+        return
+    except Exception:
+        logger.exception("Failed to load transaction detail for %s", transaction_id)
+        await query.edit_message_text("Could not load the selected transaction.")
+        return
+    _store_transaction_detail_context(context, transaction_id, str(transaction["user_id"]))
+    amount_display = _format_amount_for_display(transaction.get("amount", "0"), transaction.get("currency", "IDR"))
+    title = [
+        f"*Edit transaction*",
+        f"{_escape_markdown(transaction.get('type', 'Transaction'))} {amount_display}",
+        "",
+        "Select a field to update:",
+    ]
+    keyboard_rows: list[list[InlineKeyboardButton]] = []
+    for field, label in EDITABLE_TRANSACTION_FIELDS:
+        keyboard_rows.append(
+            [
+                InlineKeyboardButton(
+                    label,
+                callback_data=f"{TRANSACTION_CALLBACK_EDIT_FIELD_PREFIX}{field}:{transaction_id}",
+                )
+            ]
+        )
+    keyboard_rows.append(
+        [InlineKeyboardButton("Back to details", callback_data=f"{TRANSACTION_CALLBACK_CANCEL_PREFIX}{transaction_id}")]
+    )
+    keyboard_rows.append([InlineKeyboardButton("Back to results", callback_data=RECENT_CALLBACK_BACK)])
+    await query.edit_message_text("\n".join(title), parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(keyboard_rows))
+
+
+async def _prompt_transaction_field_edit(
+    query: "CallbackQuery",
+    context: ContextTypes.DEFAULT_TYPE,
+    field: str,
+    transaction_id: str,
+) -> None:
+    if not query.message:
+        return
+    api_client: "FinanceApiClient" = context.application.bot_data["api_client"]
+    try:
+        transaction = await api_client.get_transaction(transaction_id)
+    except httpx.HTTPStatusError as exc:
+        await query.edit_message_text(f"Could not load transaction: {exc.response.text}")
+        return
+    except Exception:
+        logger.exception("Failed to load transaction detail for %s", transaction_id)
+        await query.edit_message_text("Could not load the selected transaction.")
+        return
+    label = EDITABLE_TRANSACTION_FIELD_LABELS.get(field, field)
+    hint = EDITABLE_TRANSACTION_FIELD_HINTS.get(field)
+    prompt_lines = [
+        f"*Edit {label}*",
+        "",
+        f"Send the new {label.lower()} for this transaction.",
+    ]
+    if hint:
+        prompt_lines.append(hint)
+    prompt_lines.append("")
+    prompt_lines.append("Reply with the value in this chat; use the Cancel button to abort.")
+    user_id = str(transaction["user_id"])
+    _store_transaction_detail_context(context, transaction_id, user_id)
+    _set_pending_transaction_edit(
+        context,
+        transaction_id=transaction_id,
+        field=field,
+        user_id=user_id,
+        chat_id=query.message.chat_id,
+        message_id=query.message.message_id,
+    )
+    keyboard = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("Cancel", callback_data=f"{TRANSACTION_CALLBACK_CANCEL_PREFIX}{transaction_id}")]]
+    )
+    await query.edit_message_text("\n".join(prompt_lines), parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+
+
+async def _cancel_transaction_edit(
+    query: "CallbackQuery",
+    context: ContextTypes.DEFAULT_TYPE,
+    transaction_id: str,
+) -> None:
+    _clear_pending_transaction_edit(context)
+    await _render_transaction_detail_from_api(query, context, transaction_id, include_back=True)
+
+
+async def _refresh_transaction_detail_inline(
+    context: ContextTypes.DEFAULT_TYPE,
+    transaction_id: str,
+    chat_id: int,
+    message_id: int,
+) -> None:
+    api_client: "FinanceApiClient" = context.application.bot_data["api_client"]
+    try:
+        transaction = await api_client.get_transaction(transaction_id)
+    except Exception:
+        return
+    detail_text = await _build_transaction_detail_text(
+        context, api_client, str(transaction["user_id"]), transaction
+    )
+    keyboard = _transaction_detail_keyboard(transaction_id, include_back=True)
+    try:
+        await context.bot.edit_message_text(
+            detail_text,
+            chat_id=chat_id,
+            message_id=message_id,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=keyboard,
+        )
+    except BadRequest:
+        pass
+
+_TRANSACTION_FIELD_ALIASES: dict[str, str] = {
+    "description": "description",
+    "desc": "description",
+    "category": "category",
+    "cat": "category",
+    "amount": "amount",
+    "type": "type",
+    "date": "occurred_at",
+    "occurred_at": "occurred_at",
+    "wallet": "wallet",
+    "wallet_id": "wallet_id",
+    "currency": "currency",
+}
+
+
+def _parse_transaction_edit_tokens(tokens: list[str]) -> dict[str, str]:
+    updates: dict[str, str] = {}
+    for token in tokens:
+        if "=" not in token:
+            continue
+        key, value = token.split("=", 1)
+        key = key.strip().lower()
+        value = value.strip()
+        if not value:
+            continue
+        updates[key] = value
+    return updates
+
+
 async def recent_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if not query:
@@ -1989,33 +2495,218 @@ async def recent_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await query.edit_message_text("Session expired. Run /recent again.")
         return
 
-    direction = query.data.split(":", 1)[1] if ":" in query.data else ""
+    data = query.data or ""
+    if not data.startswith(RECENT_CALLBACK_PREFIX):
+        return
+    action = data[len(RECENT_CALLBACK_PREFIX) :]
     offset = user_state.get("recent_offset", 0)
-    page_size = filters["page_size"]
-    if direction == "next":
-        offset += page_size
-    elif direction == "prev":
-        offset = max(0, offset - page_size)
-
     api_client: "FinanceApiClient" = context.application.bot_data["api_client"]
     user = {"id": filters["user_id"]}
 
-    page_text, keyboard, count, has_next = await _generate_recent_page(
-        context, api_client, user, filters, offset
-    )
-    if count == 0 and direction == "next" and offset > 0:
+    if action.startswith("detail:"):
+        transaction_id = action.split("detail:", 1)[1]
+        await _show_recent_transaction_detail(query, context, api_client, user["id"], transaction_id)
+        return
+    if action == "back":
+        await _render_recent_page(query, context, api_client, user, filters, offset, user_state)
+        return
+
+    page_size = filters["page_size"]
+    if action == "next":
+        offset += page_size
+    elif action == "prev":
         offset = max(0, offset - page_size)
-        page_text, keyboard, count, has_next = await _generate_recent_page(
-            context, api_client, user, filters, offset
+    else:
+        return
+
+    await _render_recent_page(query, context, api_client, user, filters, offset, user_state)
+
+
+
+async def transaction_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not query or not query.data:
+        return
+    await query.answer()
+    data = query.data
+    if not data.startswith(TRANSACTION_CALLBACK_PREFIX):
+        return
+    payload = data[len(TRANSACTION_CALLBACK_PREFIX) :]
+    if payload.startswith("m:"):
+        transaction_id = payload.split(":", 1)[1]
+        await _show_transaction_edit_menu(query, context, transaction_id)
+        return
+    if payload.startswith("f:"):
+        rest = payload[len("f:") :]
+        if ":" not in rest:
+            return
+        field, transaction_id = rest.split(":", 1)
+        await _prompt_transaction_field_edit(query, context, field, transaction_id)
+        return
+    if payload.startswith("c:"):
+        transaction_id = payload.split(":", 1)[1]
+        await _cancel_transaction_edit(query, context, transaction_id)
+        return
+
+
+async def transaction_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    args = list(getattr(context, "args", []) or [])
+    api_client: "FinanceApiClient" = context.application.bot_data["api_client"]
+    tele_user = update.effective_user
+    if tele_user is None:
+        await update.message.reply_text("Could not determine your Telegram user.")
+        return
+    try:
+        user = await api_client.ensure_user(tele_user.id, tele_user.full_name)
+    except httpx.HTTPStatusError as exc:
+        logger.exception("Failed to ensure Telegram user in backend")
+        await update.message.reply_text(f"User sync error: {exc.response.text}")
+        return
+    except Exception:
+        logger.exception("Failed to ensure Telegram user in backend")
+        await update.message.reply_text("Could not sync your Telegram user with the backend.")
+        return
+
+    if not args:
+        await update.message.reply_text(TRANSACTION_COMMAND_USAGE)
+        return
+
+    if args[0].lower() == "edit":
+        await _handle_transaction_edit(update, context, api_client, user, args[1:])
+        return
+
+    transaction_id = args[0]
+    await _send_transaction_detail(update, context, api_client, user, transaction_id)
+
+
+async def _send_transaction_detail(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    api_client: "FinanceApiClient",
+    user: dict[str, Any],
+    transaction_id: str,
+) -> None:
+    if not update.message:
+        return
+    try:
+        transaction = await api_client.get_transaction(transaction_id)
+    except httpx.HTTPStatusError as exc:
+        await update.message.reply_text(f"Could not load transaction: {exc.response.text}")
+        return
+    except Exception:
+        logger.exception("Failed to load transaction %s", transaction_id)
+        await update.message.reply_text("Could not load the transaction.")
+        return
+
+    detail_text = await _build_transaction_detail_text(context, api_client, user["id"], transaction)
+    _store_transaction_detail_context(context, transaction_id, str(user["id"]))
+    keyboard = _transaction_detail_keyboard(transaction_id, include_back=False)
+    await update.message.reply_text(detail_text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+
+
+async def _handle_transaction_edit(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    api_client: "FinanceApiClient",
+    user: dict[str, Any],
+    args: list[str],
+) -> None:
+    message = update.message
+    if not message:
+        return
+    if not args:
+        await message.reply_text(TRANSACTION_COMMAND_USAGE)
+        return
+
+    transaction_id = args[0]
+    parsed_tokens = _parse_transaction_edit_tokens(args[1:])
+    canonical: dict[str, str] = {}
+    for key, value in parsed_tokens.items():
+        alias = _TRANSACTION_FIELD_ALIASES.get(key)
+        if alias:
+            canonical[alias] = value
+    if not canonical:
+        await message.reply_text(
+            "Provide at least one field to update. " + TRANSACTION_COMMAND_USAGE
         )
+        return
 
-    filters["has_next"] = has_next
-    user_state["recent_offset"] = offset
-    user_state["recent_filters"] = filters
-    await query.edit_message_text(
-        page_text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard
+    payload: dict[str, Any] = {}
+
+    if "description" in canonical:
+        payload["description"] = canonical["description"]
+    if "category" in canonical:
+        payload["category"] = canonical["category"]
+    if "amount" in canonical:
+        try:
+            amount_value = Decimal(canonical["amount"].replace(",", ""))
+        except (InvalidOperation, ValueError):
+            await message.reply_text("Amount must be a number.")
+            return
+        payload["amount"] = str(amount_value.quantize(Decimal("0.01")))
+    if "type" in canonical:
+        try:
+            tx_type = _resolve_transaction_type(canonical["type"])
+        except ValueError as exc:
+            await message.reply_text(str(exc))
+            return
+        payload["type"] = tx_type.value
+    if "currency" in canonical:
+        currency_value = canonical["currency"].upper()
+        if len(currency_value) != 3:
+            await message.reply_text("Currency must be a 3-letter code.")
+            return
+        payload["currency"] = currency_value
+    if "occurred_at" in canonical:
+        try:
+            parsed_date = date.fromisoformat(canonical["occurred_at"])
+        except ValueError:
+            await message.reply_text("Use YYYY-MM-DD format for dates.")
+            return
+        payload["occurred_at"] = parsed_date.isoformat()
+
+    wallet_id_value = canonical.get("wallet_id")
+    wallet_hint = canonical.get("wallet")
+    if wallet_id_value:
+        payload["wallet_id"] = wallet_id_value
+    elif wallet_hint:
+        wallet_name = wallet_hint.lstrip("@")
+        try:
+            wallet_record = await _get_wallet_by_name(context, api_client, user["id"], wallet_name)
+        except ValueError as exc:
+            await message.reply_text(str(exc))
+            return
+        payload["wallet_id"] = wallet_record["id"]
+
+    if not payload:
+        await message.reply_text("Nothing to update. " + TRANSACTION_COMMAND_USAGE)
+        return
+
+    try:
+        data = await api_client.update_transaction(transaction_id, payload)
+    except httpx.HTTPStatusError as exc:
+        await message.reply_text(f"Could not update transaction: {exc.response.text}")
+        return
+    except Exception:
+        logger.exception("Failed to update transaction %s", transaction_id)
+        await message.reply_text("Something went wrong while updating the transaction.")
+        return
+
+    amount_text = _format_amount_for_display(data["amount"], data["currency"])
+    wallet_label: str | None = None
+    wallet_id = data.get("wallet_id")
+    if wallet_id:
+        wallet_record = await _get_wallet_by_id(context, api_client, user["id"], wallet_id)
+        if wallet_record:
+            wallet_label = wallet_record.get("name")
+    wallet_suffix = f" (wallet: {_escape_markdown(wallet_label)})" if wallet_label else ""
+    description_text = _escape_markdown(str(data.get("description") or "no description"))
+    await message.reply_text(
+        f"Updated {data['type']} of {amount_text} for *{description_text}*{wallet_suffix}.",
+        parse_mode=ParseMode.MARKDOWN,
     )
-
 
 async def receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
@@ -2230,6 +2921,7 @@ def _create_application(token: str, api_client: FinanceApiClient) -> Application
     application.add_handler(CommandHandler("owed", owed))
     application.add_handler(CommandHandler("report", report))
     application.add_handler(CommandHandler("recent", recent))
+    application.add_handler(CommandHandler("transaction", transaction_command))
     application.add_handler(CommandHandler(["wallet", "wallets"], wallet_command))
     application.add_handler(CallbackQueryHandler(help_callback, pattern=f"^{HELP_CALLBACK_PREFIX}"))
     application.add_handler(CallbackQueryHandler(wallet_callback, pattern=f"^{WALLET_CALLBACK_PREFIX}"))
@@ -2237,6 +2929,7 @@ def _create_application(token: str, api_client: FinanceApiClient) -> Application
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, free_text_transaction))
     application.add_handler(MessageHandler(filters.PHOTO, receipt_photo))
     application.add_handler(CallbackQueryHandler(recent_callback, pattern=f"^{RECENT_CALLBACK_PREFIX}"))
+    application.add_handler(CallbackQueryHandler(transaction_callback, pattern=f"^{TRANSACTION_CALLBACK_PREFIX}"))
     return application
 
 
@@ -2277,6 +2970,7 @@ async def init_bot() -> None:
                         BotCommand("owed", "Show outstanding balances"),
                         BotCommand("wallet", "Manage wallets"),
                         BotCommand("recent", "Show recent transactions"),
+                        BotCommand("transaction", "View or edit a transaction"),
                         BotCommand("report", "Show a spending summary"),
                     ]
                 )

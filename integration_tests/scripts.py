@@ -29,6 +29,7 @@ cmds = [
     [sys.executable, "integration_tests/telegram_bot/basic_flows.py"],
     [sys.executable, "integration_tests/telegram_bot/advanced_flows.py"],
     [sys.executable, "integration_tests/telegram_bot/repay_flow.py"],
+    [sys.executable, "integration_tests/telegram_bot/edit_transaction_flow.py"]
 ]
 
 results = []
